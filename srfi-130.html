@@ -1,7 +1,6 @@
-<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">
-<html>
+﻿<html>
   <head>
-    <title>SRFI 130: Character spans</title>
+    <title>SRFI 130: String cursors</title>
     <link rel="stylesheet" href="http://srfi.schemers.org/srfi.css" type="text/css" />
   </head>
 
@@ -9,11 +8,11 @@
 
 <h1>Title</h1>
 
-Character spans
+String cursors
 
 <h1>Author</h1>
 
-John Cowan, Will Clinger
+John Cowan
 
 <h1>Status</h1>
 
@@ -26,603 +25,355 @@ John Cowan, Will Clinger
 
 <h1>Abstract</h1>
 
-This SRFI describes a library for manipulating textual content based on <em>character spans</em>, also known as just <em>spans</em>.  A span is a sequence of characters of a fixed length, like a string.  Unlike strings, spans are immutable and can share storage with other spans.
+This SRFI describes a library for manipulating subsequences of strings specified by <i>cursors</i> rather than the traditional string indexes.  While indexes are exact integers ranging from 0 to the length of the string they refer to, cursors may or may not be exact integers; if they are, they aren't necessarily consecutive, as they may refer to byte positions rather than character positions in the string.
 
 <h1>Issues</h1>
 
-<ol><li><p>Is <em>character span</em> a satisfactory name?
+<ol><li><p>(resolved)
 </p></li>
-<li><p>Currently <tt>span-mismatch</tt> returns a cursor into its second argument.  Should it return a cursor into the first argument, or into both arguments?  (In Chibi it makes no difference.)
+<li><p>(resolved)
 </p></li></ol>
 
 <h1>Rationale</h1>
 
 <p>
-When SRFI 13 was defined in 1999, it was intended to provide efficient string operations on both whole strings and substrings.  At that time, only Guile and T provided true shared substrings, and SRFI 13 could not reasonably require them of a Scheme implementation.  Consequently, almost all the SRFI 13 procedures accept optional <em>start</em> and <em>end</em> arguments for each of the string arguments, indexing the beginning and the end of the substring(s) to be operated on.
+When SRFI 13 was defined in 1999, it was intended to provide efficient string operations on both whole strings and substrings.  At that time, it was normal for strings to be sequences of 8-bit characters, or in a few cases, characters of other fixed lengths.  Consequently, many of the SRFI 13 procedures accept optional <em>start</em> and <em>end</em> arguments for each of the string arguments, indexing the beginning and the end of the substring(s) to be operated on.
 </p>
 <p>
-Unfortunately, variable-arity procedures are often slow and may not interact well with optional type checking in Schemes that provide it.  In addition, it is now fairly common to store strings internally as UTF-8 or UTF-16 code unit sequences, which means that indexing operations are often O(n) rather than O(1), and string mutation can be extremely expensive if the storage used for the string needs to be expanded and the implementation does not use an indirect pointer to it (as in Chicken).
+Unfortunately for this design, Unicode has become much more widely used, and it is now fairly common for implementations to store strings internally as UTF-8 or UTF-16 code unit sequences, which means that indexing operations are potentially O(n) rather than O(1).  Using opaque cursors makes it possible to iterate much more efficiently through such strings compared to incrementing or decrementing indexes.  Furthermore, string mutation can be extremely expensive if the storage used for the string needs to be expanded, particularly if the implementation does not use an indirect pointer to it (as in Chicken), so this SRFI does not provide for it.
 </p>
+<p>Variable-arity procedures are often slow and may not interact well with optional type checking in Schemes that provide it.  Therefore, the procedures of this SRFI require <em>cursor</em>, <em>start</em> and <em>end</em> arguments rather than making them optional.  Note that this means optional arguments may appear before required ones: this can be readily handled using <code>case-lambda</code>.</p>
 <p>
-As for shared substrings, they are no more common in 2015 than they were in 1999.  (Guile actually provides not only shared substrings but also copy-on-write and fully immutable strings.)  Fortunately, since then it has become normal for Schemes to provide user-defined records, and they are required by both R6RS and R7RS.  This makes it possible to portably provide a representation for a segment of a string, provided the string is never mutated.  The most portable such record consists of a string and two indexes, but other more efficient representations may be used instead.
+The operations provided here are entirely independent of the character repertoire supported by the implementation.  In particular, this means that the comparison and case conversion procedures of SRFI 13 are excluded.  There is also no provision for <a class="ext-link" href="http://www.r6rs.org/final/html/r6rs-lib/r6rs-lib-Z-H-2.html#node_idx_54">R6RS normalization procedures</a> or for an <tt>string-&gt;integer</tt> procedure that was proposed for SRFI 13 but not included.  These may appear in future SRFIs.
+</p>
+<p>In addition, the SRFI 13 procedures that accept two strings (and therefore up to four indexes) have been omitted from this SRFI, as they are clunky to use and interpret.  Some procedures that accept an arbitrary number of strings in R7RS-small have analogues here that accept just one string and optional start and end cursors.
 </p>
 <p>
 This SRFI, therefore, is intended to help move the practice of Scheme programming away from mutable strings, string indexes, and SRFI 13, while maintaining some degree of conceptual backward compatibility.  It does not require any particular run-time efficiencies from its procedures.
 </p>
-<p>
-The operations provided here (with the exception of those in the Case and Comparisons sections) are entirely independent of the character repertoire supported by the implementation.  In particular, this means that most of the case-insensitive procedures of SRFI 13 are excluded.  There is also no provision for <a class="ext-link" href="http://www.r6rs.org/final/html/r6rs-lib/r6rs-lib-Z-H-2.html#node_idx_54"><span class="icon">???</span>R6RS normalization procedures</a> or for an <tt>string-&gt;integer</tt> procedure that was proposed for SRFI 13 but not included.  These may appear in future SRFIs.
-</p>
 
-<p>
-Note:  The specification was written by John Cowan, the implementation by Will Clinger.
-</p>
 
 <h1>Specification</h1>
 
 <p>
-Cursors are pointers into spans, and are not necessarily disjoint from other Scheme types.  For example, they may be exact integers that are character-based indexes into strings.  Alternatively, in an implementation whose internal representation of strings is UTF-8, cursors may be indexes of individual bytes in the string.  It is also possible to implement cursors as objects of a disjoint type.  The cursor procedures of this SRFI are mostly taken from Chibi Scheme.
+Cursors are pointers into strings, and are not necessarily disjoint from other Scheme types.  For example, they may be exact integers that are character-based indexes into strings.  Alternatively, in an implementation whose internal representation of strings is UTF-8, cursors may be indexes of individual bytes in the string.  It is also possible to implement cursors as objects of a disjoint type.  The cursor procedures of this SRFI are mostly taken from Chibi Scheme.
+</p>
+<p>It is an error to make any use of a cursor referring to a string after the string has been mutated by a procedure like <code>string-set!</code>, <code>string-copy!</code>, or <code>string-fill!</code>.</p>
+<p>
+Given a string of length <em>n</em>, there are <em>n</em>+2 possible cursors that refer to it: one for each character in the string, one for the position just before the first character (known as the "pre-start cursor"), and one for the position just after the last character (known as the "post-end cursor").  These additional positions are provided for backward and forward iteration respectively, and also because when creating a string from cursors the second cursor argument is exclusive. It is an error if a cursor argument is not one of the possible cursors for the string or string argument.
+</p>
+<p>Arguments named <i>start</i> and <i>end</i> default to the cursor for the first character in the string and the post-string cursor respectively. </p>
+<p>
+<p>
+All predicates passed to procedures defined in this SRFI may be called in any order and any number of times, except as otherwise noted.  In SRFI 13, there is no such provision, and so character sets are inherently more efficient than predicates <a class="ext-link" href="http://srfi.schemers.org/srfi-13/mail-archive/msg00052.html">because testing them is fast and free of side effects</a>, though how fast character sets are if they support full Unicode is very implementation-dependent.  Though not required to do so by this SRFI, implementations may extend procedures that accept predicates to accept <a href="http://srfi.schemers.org/srfi-14/srfi-14.html">SRFI 14</a> character sets or single characters or both.
+</p>
+Note: Procedures with similar names and purposes to R7RS-small or <a class="ext-link" href="http://srfi.schemers.org/srfi-13/srfi-13.html">SRFI 13</a> procedures are marked [R7RS-small] and [SRFI 13] respectively.
+</p>
+<h2>Procedure index</h2>
+<p><a href="#stringcursors">String cursors</a><code>: string-cursor-start, string-cursor-end, string-cursor-next, string-cursor-prev, string-cursor-forward, string-cursor-backward, string-cursor=?, string-cursor&lt;?, string-cursor>?, string-cursor&lt;=?, string-cursor>=?</code></p>
+<p><a href="#selection">Selection</a>: <code>string-ref/cursor, string-take/cursor, string-drop/cursor, string-split-at/cursor</code></p>
+<p><a href="#paddingtrimmingandcompressing">Padding, trimming, and compressing</a>: <code>string-pad/cursors, string-pad-right/cursors, string-trim/cursors, string-trim-right/cursors, string-trim-both/cursors</code></p>
+<p><a href="#searching">Padding, trimming, and compressing</a>: <code>string-count/cursors, string-find/cursors, string-find-right/cursors, string-skip/cursors, string-skip-right/cursors, string-take-while/cursors, string-drop-while/cursors, string-span/cursors, string-break/cursors</code></p>
+<p><a href="#thewholestring">The whole string</a>: <code>string-reverse/cursors, string-every/cursors, string-any/cursors</code></p>
+<p><a href="#foldingandmapping">Folding and mapping</a>: <code>string-map/cursors, string-for-each/cursors, string-for-each-cursor, string-fold/cursors, string-fold/cursors</code></p>
+<p><a href="#parsing">Parsing</a>: <code>string-split/cursors</code></p>
+<p><a href="#filteringandpartioning">Filtering and partitioning</a>: <code>string-filter/cursors, string-remove/cursors, string-partition</code></p>
+<p><a href="#copying and conversion">Copying and conversion</a>: <code>string-copy/cursors, substring/cursors, string->list/cursors, string->vector/cursors</code></p>
+
+
+<p>
+<tt>(string-cursor-start </tt><em>string</em><tt>)</tt>
 </p>
 <p>
-Given a span of length <em>n</em>, there are <em>n</em>+2 possible cursors that refer to it: one for each character in the span, one for the position just before the first character (known as the "pre-start cursor"), and one for the position just after the last character (known as the "post-end cursor").  These additional positions are provided for backward and forward iteration respectively, and also because when creating a span from cursors the second cursor argument is exclusive. It is an error if a cursor argument is not one of the possible cursors for the string or span argument.
+Returns a cursor referring to the first character in <em>string</em>.
 </p>
 <p>
-Note: Procedures with similar names and purposes to R7RS-small or <a class="ext-link" href="http://srfi.schemers.org/srfi-13/srfi-13.html"><span class="icon">???</span>SRFI 13</a> procedures are marked [R7RS-small] and [SRFI 13] respectively.
+<tt>(string-cursor-end </tt><em>string</em><tt>)</tt>
 </p>
 <p>
-All predicates passed to procedures defined in this SRFI may be called in any order and any number of times, except as otherwise noted.  In SRFI 13, there is no such provision, and so character sets are inherently more efficient than predicates <a class="ext-link" href="http://srfi.schemers.org/srfi-13/mail-archive/msg00052.html"><span class="icon">???</span>because testing them is fast and free of side effects</a>, though how fast character sets are if they support full Unicode is very implementation-dependent.
+Returns the post-end cursor of <em>string</em>.
 </p>
 <p>
-For security and efficiency reasons, there is no operation to retrieve the underlying string from a character span.
-</p>
-<h2 id="Spancursors">Span cursors</h2>
-<p>
-<tt>(span-cursor-start </tt><em>span</em><tt>)</tt>
+<tt>(string-cursor-ref </tt><em>string cursor</em><tt>)</tt>
 </p>
 <p>
-Returns a cursor referring to the first character in <em>span</em>.
+Returns the character referred to by <em>cursor</em>.  It is an error if <em>cursor</em> is the pre-start or post-end cursor of <em>string</em> or <em>string</em>.
 </p>
 <p>
-<tt>(span-cursor-end </tt><em>span</em><tt>)</tt>
+<tt>(string-cursor-next </tt><em>string cursor</em><tt>)</tt>
 </p>
 <p>
-Returns the post-end cursor of <em>span</em>.
+Returns the cursor following <em>cursor</em>.    It is an error if <em>cursor</em> is the post-end cursor of <em>string</em>.
 </p>
 <p>
-<tt>(span-cursor-ref </tt><em>span cursor</em><tt>)</tt>
+<tt>(string-cursor-prev </tt><em>string cursor</em><tt>)</tt>
 </p>
 <p>
-Returns the character referred to by <em>cursor</em>.  It is an error if <em>cursor</em> is the pre-start or post-end cursor of <em>string</em> or <em>span</em>.
+Returns the cursor preceding <em>cursor</em>.  It is an error if <em>cursor</em> is the pre-start cursor of <em>string</em>.
 </p>
 <p>
-<tt>(span-cursor-next </tt><em>span cursor</em><tt>)</tt>
+<tt>(string-cursor-forward </tt><em>string cursor n</em><tt>)</tt>
 </p>
 <p>
-Returns the cursor following <em>cursor</em>.    It is an error if <em>cursor</em> is the post-end cursor of <em>span</em>.
+<tt>(string-cursor-backward </tt><em>string cursor n</em><tt>)</tt>
 </p>
 <p>
-<tt>(span-cursor-prev </tt><em>span cursor</em><tt>)</tt>
+Iterates <tt>string-cursor-next</tt> or <tt>string-cursor-prev</tt> <em>n</em> times.
 </p>
 <p>
-Returns the cursor preceding <em>cursor</em>.  It is an error if <em>cursor</em> is the pre-start cursor of <em>span</em>.
+<tt>(string-cursor=? </tt><em>string cursor<sub>1</sub> cursor<sub>2</sub></em><tt>)</tt>
 </p>
 <p>
-<tt>(span-cursor-forward </tt><em>span cursor n</em><tt>)</tt>
+<tt>(string-cursor&lt;? </tt><em>string cursor<sub>1</sub> cursor<sub>2</sub></em><tt>)</tt>
 </p>
 <p>
-<tt>(span-cursor-backward </tt><em>span cursor n</em><tt>)</tt>
+<tt>(string-cursor&gt;? </tt><em>string cursor<sub>1</sub> cursor<sub>2</sub></em><tt>)</tt>
 </p>
 <p>
-Iterates <tt>span-cursor-next</tt> or <tt>span-cursor-prev</tt> <em>n</em> times.
+<tt>(string-cursor&lt;=? </tt><em>string cursor<sub>1</sub> cursor<sub>2</sub></em><tt>)</tt>
 </p>
 <p>
-<tt>(span-cursor=? </tt><em>span cursor<sub>1</sub> cursor<sub>2</sub></em><tt>)</tt>
-</p>
-<p>
-<tt>(span-cursor&lt;? </tt><em>span cursor<sub>1</sub> cursor<sub>2</sub></em><tt>)</tt>
-</p>
-<p>
-<tt>(span-cursor&gt;? </tt><em>span cursor<sub>1</sub> cursor<sub>2</sub></em><tt>)</tt>
-</p>
-<p>
-<tt>(span-cursor&lt;=? </tt><em>span cursor<sub>1</sub> cursor<sub>2</sub></em><tt>)</tt>
-</p>
-<p>
-<tt>(span-cursor&gt;=? </tt><em>span cursor<sub>1</sub> cursor<sub>2</sub></em><tt>)</tt>
+<tt>(string-cursor&gt;=? </tt><em>string cursor<sub>1</sub> cursor<sub>2</sub></em><tt>)</tt>
 </p>
 <p>
 Compare <em>cursor<sub>1</sub></em> and <em>cursor<sub>2</sub></em>.
 </p>
 <p>
-<tt>(span-cursor-&gt;index </tt><em>span cursor</em><tt>)</tt>
+<tt>(string-cursor-&gt;index </tt><em>string cursor</em><tt>)</tt>
 </p>
 <p>
-Return the character index into <em>span</em> corresponding to <em>cursor</em>.  If <em>cursor</em> is the pre-start cursor of <em>span</em>, -1 is returned.  If <em>cursor</em> is the post-end cursor of <em>string</em> or <em>span</em>, the length of <em>string</em> or <em>span</em> is returned.  It is an error if <em>cursor</em> does not correspond to a specific index.
+Return the character index into <em>string</em> corresponding to <em>cursor</em>.  If <em>cursor</em> is the pre-start cursor of <em>string</em>, -1 is returned.  If <em>cursor</em> is the post-end cursor of <em>string</em> or <em>string</em>, the length of <em>string</em> or <em>string</em> is returned.  It is an error if <em>cursor</em> does not correspond to a specific index.
 </p>
 <p>
-<tt>(span-index-&gt;cursor </tt><em>span index</em><tt>)</tt>
+<tt>(string-index-&gt;cursor </tt><em>string index</em><tt>)</tt>
 </p>
 <p>
-Returns the cursor referring to <em>span</em> that corresponds to <em>index</em>.  If <em>index</em> is -1, returns the pre-start cursor of <em>string</em> or <em>span</em>.  If <em>index</em> is equal to the length of <em>string</em> or <em>span</em>, returns the post-end cursor of <em>string</em> or <em>span</em>.
+Returns the cursor referring to <em>string</em> that corresponds to <em>index</em>.  If <em>index</em> is -1, returns the pre-start cursor of <em>string</em> or <em>string</em>.  If <em>index</em> is equal to the length of <em>string</em> or <em>string</em>, returns the post-end cursor of <em>string</em> or <em>string</em>.
 </p>
 <p>
-<tt>(span-cursor-difference </tt><em>span cursor<sub>1</sub> cursor<sub>2</sub></em><tt>)</tt>
+<tt>(string-cursor-difference </tt><em>string cursor<sub>1</sub> cursor<sub>2</sub></em><tt>)</tt>
 </p>
 <p>
 Return the difference in characters between <em>cursor<sub>2</sub></em> and <em>cursor<sub>1</sub></em>.  The arguments are in reverse order from the subtraction procedure so that they can be passed as start and end cursors respectively.
 </p>
-<h2 id="Spanconstructors">Span constructors</h2>
-<p>
-<tt>(make-whole-span </tt><em>string</em><tt>)</tt>
-</p>
-<p>
-Returns a character span which contains all the characters of <em>string</em> in order.
-</p>
-<p>
-<tt>(make-span </tt><em>string start end</em><tt>)</tt>
-</p>
-<p>
-Returns a character span which contains the characters of <em>string</em> in order from indexes <em>start</em> (inclusive) to <em>end</em> (exclusive).
-</p>
-<p>
-<tt>(span </tt><em>char</em> ...<tt>)</tt> [R7RS-small]
-</p>
-<p>
-Returns a character span which contains the characters <em>char</em> in order.
-</p>
-<p>
-<tt>(span-transform </tt><em>proc span obj</em> ...<tt>)</tt>
-</p>
-<p>
-<em>Proc</em> is a procedure which accepts a string as its first argument and returns a string.  It is invoked on a string which contains the characters of <em>span</em> in order plus the <em>obj</em> arguments, if any.  The resulting string is returned as a character span by <tt>span-transform</tt>.  This procedure allows string-based procedures to be easily used in a context that provides and expects spans.
-</p>
-<p>
-<tt>(span-unfold </tt><em>stop? mapper successor seed</em><tt>)</tt>
-</p>
-<p>
-<tt>(span-unfold-right </tt><em>stop? mapper successor</em> <em>seed</em><tt>)</tt>
-</p>
-<p>
-Returns a span whose characters are generated in forward/reverse order using the following algorithm, initializing <em>x</em> to <em>seed</em>: If the result of applying the predicate <em>stop?</em> to <em>x</em> is true, the span is complete and is returned.  Otherwise, apply the procedure <em>mapper</em> to <em>x</em>. The value that <em>mapper</em> returns becomes the next character of the span.  Then a new value of <em>x</em> is obtained by applying the procedure <em>successor</em> to <em>x</em>, and this algorithm is repeated.
-</p>
-<p>
-<tt>(span-tabulate </tt><em>len proc</em><tt>)</tt> [SRFI 13]
-</p>
-<p>
-Invokes <em>proc</em> for all exact integers between 0 (inclusive) and <em>len</em> (exclusive), and returns a span containing the characters returned by the invocations in order.
-</p>
-<p>
-Compatibility note:  The argument order here agrees with the <tt>list-tabulate</tt> procedure of <a class="ext-link" href="http://srfi.schemers.org/srfi-1/srfi-1.html"><span class="icon">???</span>SRFI 1</a> rather than SRFI 13's <tt>string-tabulate</tt> procedure.  The discrepancy was <a class="ext-link" href="http://srfi.schemers.org/srfi-13/mail-archive/msg00143.html"><span class="icon">???</span>unintentional</a>, but was <a class="ext-link" href="http://srfi.schemers.org/srfi-13/mail-archive/msg00144.html"><span class="icon">???</span>discovered too late to fix</a>.
-</p>
-<h2 id="Predicates">Predicates</h2>
-<p>
-<tt>(span? </tt><em>obj</em><tt>)</tt> [R7RS-small]
-</p>
-<p>
-Returns <tt>#t</tt> if <em>obj</em> is a character span, and <tt>#f</tt> otherwise.
-</p>
-<p>
-<tt>(span-null? </tt><em>span</em><tt>)</tt> [SRFI 13]
-</p>
-<p>
-Returns <tt>#t</tt> if <em>span</em> contains zero characters, and <tt>#f</tt> otherwise.
-</p>
-<p>
-<tt>(span-every? </tt><em>pred span</em><tt>)</tt> [SRFI 13]
-</p>
-<p>
-If <em>pred</em> returns true for every character in <em>span</em> from left to right, then returns what the last call to <em>pred</em> returns, or <tt>#t</tt> if <em>pred</em> isnever called.  Returns <tt>#f</tt> otherwise.
-</p>
-<p>
-<tt>(span-any? </tt><em>pred span</em><tt>)</tt> [SRFI 13]
-</p>
-<p>
-Returns <tt>#f</tt> if <em>pred</em> returns false for each character in <em>span</em>, and <tt>#t</tt> otherwise.
-</p>
 <h2 id="Selection">Selection</h2>
 <p>
-<tt>(span-ref </tt><em>span k</em><tt>)</tt> [R7RS-small]
+<tt>(string-ref/cursor </tt><em>string cursor</em><tt>)</tt> [R7RS-small]
 </p>
 <p>
-Returns the <em>k</em>th character of <em>span</em>, starting with 0.  It is an error if <em>k</em> is not a non-negative exact integer less than the length of <em>span</em>.
+Returns the character of <em>string</em> referred to by <i>cursor</i>.  It is an error if <i>cursor</i> is the pre-start or post-end cursor of <i>string</i>.
 </p>
 <p>
-<tt>(span-take </tt><em>span n</em><tt>)</tt> [SRFI 13]
+<tt>(string-take/cursor </tt><em>string cursor</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-Returns a character span which contains the first <em>n</em> characters of <em>span</em>.
+Returns a string which contains the characters of <em>string</em> up to but not including <i>cursor</i>.  It is an error if <i>cursor</i> is the pre-start cursor of <i>string</i>.
 </p>
 <p>
-<tt>(span-take-right </tt><em>span n</em><tt>)</tt> [SRFI 13]
+<tt>(string-drop/cursor </tt><em>string cursor</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-Returns a character span which contains the last <em>n</em> characters of <em>span</em>.
+Returns a string which contains the characters of <em>string</em> starting with and including <i>cursor</i>.  It is an error if <i>cursor</i> is the post-end cursor of <i>string</i>.
 </p>
 <p>
-<tt>(span-drop </tt><em>span n</em><tt>)</tt> [SRFI 13]
+Returns a string which contains all but the last <em>n</em> characters of <em>string</em>.
 </p>
 <p>
-Returns a character span which contains all but the first <em>n</em> characters of <em>span</em>.
+<tt>(string-split-at/cursor </tt><em>string cursor</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-<tt>(span-drop-right </tt><em>span n</em><tt>)</tt> [SRFI 13]
-</p>
-<p>
-Returns a character span which contains all but the last <em>n</em> characters of <em>span</em>.
-</p>
-<p>
-<tt>(span-split-at </tt><em>span n</em><tt>)</tt> [SRFI 13]
-</p>
-<p>
-Returns two values, a character span containing the first <em>n</em> characters of <em>span</em>, and another character span containing the remaining characters of <em>span</em>.
-</p>
-<p>
-<tt>(span-replicate </tt><em>span from to</em><tt>)</tt>
-</p>
-<p>
-<em>Span</em> is conceptually replicated an infinite number of times to both left and right, and this doubly infinite sequence is then truncated to form a span starting at index <em>from</em> (inclusive) and ending at index <em>to</em> (exclusive).  Negative indexes are allowed in order to access the infinite left extension.
-</p>
-<p>
-Compatibility note: This procedure is analogous the SRFI 13 procedure <tt>xsubstring</tt>, except that the <em>to</em> argument is required.
-</p>
-<p>
-Examples:
-</p>
-<pre class="wiki">(span-replicate (span-whole-string "abcdef") 2 7)
-      =&gt; span containing "cdefab" ; rotate left
-
-(span-replicate (span-whole-string "abcdef") -2 4)
-      =&gt; span containing "efabcd" ; rotate right
-
-(span-replicate (span-whole-string "abc") 0 7)
-      =&gt; span containing "abcabca" ; replicate
-</pre><p>
-<tt>(subspan </tt><em>span start end</em><tt>)</tt> [R7RS-small]
-</p>
-<p>
-<tt>(subspan/cursors </tt><em>span start end</em><tt>)</tt> [R7RS-small]
-</p>
-<p>
-Returns a character span which contains the characters in <em>span</em> between the indexes/cursors <em>start</em> (inclusive) and <em>end</em> (exclusive).
+Returns two values, a string containing the characters of <em>string</em> to but not including <i>cursor</i>, and another string containing the the characters of <em>string</em> starting with and including <i>cursor</i>.  It is an error if <i>cursor</i> is the pre-start or post-end cursor of <i>string</i>.
 </p>
 <h2 id="Paddingtrimmingandcompressing">Padding, trimming, and compressing</h2>
 <p>
-<tt>(span-pad </tt><em>span len</em> [ <em>char</em> ]<tt>)</tt> [SRFI 13]
+<tt>(string-pad/cursors </tt><em>string len</em> [ <em>char</em> ] <em>start end</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-<tt>(span-pad-right </tt><em>span len</em> [ <em>char</em> ]<tt>)</tt> [SRFI 13]
+<tt>(string-pad-right/cursors </tt><em>string len</em> [ <em>char</em> ] <em>start end</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-Returns a span of length <em>len</em> consisting of <em>span</em> padded on the left/right by as many occurrences of the character <em>char</em> as needed.  If <em>span</em> has more than <em>len</em> characters, it is truncated on the left/right to length <em>len</em>.  If <em>char</em> is omitted, <tt>#\space</tt> is used.
+Returns a string of length <em>len</em> consisting of the substring of <em>string</em> from <i>start</i> (inclusive) to <i>end</i> (inclusive), padded on the left/right by as many occurrences of the character <em>char</em> as needed.  If <em>string</em> has more than <em>len</em> characters, it is truncated on the left/right to length <em>len</em>.  If <em>char</em> is omitted, <tt>#\space</tt> is used.
 </p>
 <p>
-<tt>(span-trim </tt><em>span</em> [ <em>pred</em> ]<tt>)</tt> [SRFI 13]
+<tt>(string-trim/cursors </tt><em>string</em> [ <em>pred</em> ] <em>start end</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-<tt>(span-trim-right </tt><em>span</em> [ <em>pred</em> ]<tt>)</tt> [SRFI 13]
+<tt>(string-trim-right/cursors </tt><em>string</em> [ <em>pred</em> ] <em>start end</em><tt>)</tt> [SRFI 13]
+</p> 
+<p>
+<tt>(string-trim-both/cursors </tt><em>string</em> [ <em>pred</em> ] <em>start end</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-<tt>(span-trim-both </tt><em>span</em> [ <em>pred</em> ]<tt>)</tt> [SRFI 13]
+Trim the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive) by skipping over all characters on the left / on the right / on both sides that satisfy <em>pred</em> and returning the resulting string.  <em>Pred</em> defaults to <tt>(lambda (x) (eqv? x #\space))</tt>.
 </p>
 <p>
-Trim <em>span</em> by skipping over all characters on the left / on the right / on both sides that satisfy <em>pred</em> and returning the resulting span.  <em>Pred</em> defaults to <tt>(lambda (x) (eqv? x #\space))</tt>.
+<tt>(string-compress/cursors </tt><em>string</em> [ <em>char</em> ] <em>start end</em><tt>)</tt>
 </p>
 <p>
-<tt>(span-compress </tt><em>span</em> [ <em>char</em> ]<tt>)</tt>
-</p>
-<p>
-Return a span which differs from <em>span</em> in that every sequence of consecutive occurrences of <em>char</em> has been replaced by a single <em>char</em>.  If <em>char</em> is omitted, <tt>#\space</tt> is used.
-</p>
-<h2 id="Prefixesandsuffixes">Prefixes and suffixes</h2>
-<p>
-<tt>(span-prefix </tt><em>span<sub>1</sub></em> <em>span<sub>2</sub></em><tt>)</tt>
-</p>
-<p>
-<tt>(span-suffix </tt><em>span<sub>1</sub></em> <em>span<sub>2</sub></em><tt>)</tt>
-</p>
-<p>
-Returns a span containing the characters in the common prefix/suffix of <em>span<sub>1</sub></em> and <em>span<sub>2</sub></em>.  If there is no common prefix/suffix, returns an empty span.
-</p>
-<p>
-<tt>(span-prefix-length </tt><em>span<sub>1</sub></em> <em>span<sub>2</sub></em><tt>)</tt> [SRFI 13]
-</p>
-<p>
-<tt>(span-suffix-length </tt><em>span<sub>1</sub></em> <em>span<sub>2</sub></em><tt>)</tt> [SRFI 13]
-</p>
-<p>
-Returns the length (in characters) of the span that would be returned by <tt>span-prefix</tt> and friends.
-</p>
-<p>
-<tt>(span-mismatch </tt><em>span<sub>1</sub></em> <em>span<sub>2</sub></em><tt>)</tt>
-</p>
-<p>
-Returns a cursor referring to the first character in <em>span<sub>2</sub></em> that is not equal to the corresponding character in <em>span<sub>1</sub></em>.  If the spans are equal, the post-end cursor of <em>span<sub>2</sub></em> is returned.  If <em>span<sub>2</sub></em> is empty, then the pre-start cursor of <em>span<sub>2</sub></em> is returned.
-</p>
-<p>
-<tt>(span-mismatch-right </tt><em>span<sub>1</sub></em> <em>span<sub>2</sub></em><tt>)</tt>
-</p>
-<p>
-Returns a cursor referring to the first character in <em>span<sub>2</sub></em>, scanning in reverse order, that is not equal to the corresponding character in <em>span<sub>1</sub></em>, also processed in reverse order.  If the spans are equal, the pre-start cursor of <em>span<sub>2</sub></em> is returned.  If <em>span<sub>2</sub></em> is empty, then the post-end cursor of <em>span<sub>2</sub></em> is returned.
-</p>
-<p>
-<tt>(span-prefix? </tt><em>span<sub>1</sub></em> <em>span<sub>2</sub></em><tt>)</tt> [SRFI 13]
-</p>
-<p>
-<tt>(span-suffix? </tt><em>span<sub>1</sub> span<sub>2</sub></em><tt>)</tt> [SRFI 13]
-</p>
-<p>
-Returns <tt>#t</tt> if <em>span<sub>1</sub></em> is a prefix/suffix of <em>span<sub>2</sub></em>, and <tt>#f</tt> otherwise.
+Return a string which differs from the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive) in that every sequence of consecutive occurrences of <em>char</em> has been replaced by a single <em>char</em>.  If <em>char</em> is omitted, <tt>#\space</tt> is used.
 </p>
 <h2 id="Searching">Searching</h2>
 <p>
-<tt>(span-count </tt><em>pred span</em><tt>)</tt> [SRFI 13]
+<tt>(string-count/cursors </tt><em>pred string start end</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-Returns the number of characters in <em>span</em> which satisfy <em>pred</em> as an exact integer.
+Returns the number of characters in the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive) which satisfy <em>pred</em> as an exact integer.
 </p>
 <p>
-<tt>(span-find </tt><em>pred span</em><tt>)</tt>
+<tt>(string-find/cursors </tt><em>pred string start end</em><tt>)</tt>
 </p>
 <p>
-Returns a cursor referring to the first character in <em>span</em> that satisfies <em>pred</em>, or the post-end cursor of <em>span</em> if there is none.
+Returns a cursor referring to the first character in the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive) that satisfies <em>pred</em>, or the post-end cursor of <em>string</em> if there is none.
 </p>
 <p>
-<tt>(span-find-right </tt><em>pred span</em><tt>)</tt>
+<tt>(string-find-right/cursors </tt><em>pred string start end</em><tt>)</tt>
 </p>
 <p>
-Returns a cursor referring to the first character in <em>span</em> that satisfies <em>pred</em>, processing <em>span</em> in reverse order, or the pre-start cursor of <em>span</em> if there is none.
+Returns a cursor referring to the first character in the substring of <em>string</em> from <em>end</em> (exclusive) to <em>start</em> (inclusive) that satisfies <em>pred</em>, processing it in reverse order, or the pre-start cursor of <em>string</em> if there is none.
 </p>
 <p>
 Compatibility note:  These procedures are analogous to SRFI 13's <tt>string-index</tt> procedures, but return cursors rather than indexes or <tt>#f</tt> on failure.
 </p>
 <p>
-<tt>(span-skip </tt><em>pred span</em><tt>)</tt> [SRFI 13]
+<tt>(string-skip/cursors </tt><em>pred string</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-<tt>(span-skip-right </tt><em>pred span</em><tt>)</tt> [SRFI 13]
+<tt>(string-skip-right/cursors </tt><em>pred string start end</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-Returns a cursor pointing to the first/last character in <em>span</em> that does not satisfy <em>pred</em>, or the post-end/pre-start cursor if there is none.
+Returns a cursor pointing to the first/last character in the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive) that does not satisfy <em>pred</em>, or the cursor after <i>end</i> / before <i>start</i> if there is none.
 </p>
 <p>
-<tt>(span-take-while </tt><em>pred span</em><tt>)</tt>
+<tt>(string-take-while/cursors </tt><em>pred string start end</em><tt>)</tt>
 </p>
 <p>
-Returns the longest initial prefix of <em>span</em> whose characters all satisfy <em>pred</em>. 
+Returns the longest initial prefix of the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive) whose characters all satisfy <em>pred</em>. 
 </p>
 <p>
-<tt>(span-drop-while </tt><em>pred span</em><tt>)</tt>
+<tt>(string-drop-while/cursors </tt><em>pred string start end</em><tt>)</tt>
 </p>
 <p>
-Drops the longest initial prefix of <em>span</em> whose characters all satisfy <em>pred</em>, and returns the rest of <em>span</em>. 
+Drops the longest initial prefix of the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive) whose characters all satisfy <em>pred</em>, and returns the rest of <em>string</em>. 
 </p>
 <p>
-<tt>(span-span </tt><em>pred span</em><tt>)</tt>
+<tt>(string-span/cursors </tt><em>pred string start end</em><tt>)</tt>
 </p>
 <p>
-<tt>(span-break </tt><em>pred span</em><tt>)</tt>
+<tt>(string-break/cursors </tt><em>pred string start end</em><tt>)</tt>
 </p>
 <p>
-The <tt>span-span</tt> procedure splits <em>span</em>, returning two values: the longest initial prefix whose characters all satisfy <em>pred</em>, and the remainder of <em>span</em>.  The <tt>span-break</tt> procedure inverts the sense of the predicate: the remainder commences with the first character of <em>span</em> that satisfies <em>pred</em>.  In other words: <tt>span-span</tt> finds the intial span of characters satisfying <em>pred</em>, and <tt>span-break</tt> breaks <em>span</em> at the first character satisfying <em>pred</em>.
+The <tt>string-span/cursors</tt> procedure splits the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive), returning two values: the longest initial prefix whose characters all satisfy <em>pred</em>, and the remainder of <em>string</em>.  The <tt>string-break/cursors</tt> procedure inverts the sense of the predicate: the remainder commences with the first character of <em>string</em> that satisfies <em>pred</em>.  In other words: <tt>string-span/cursors</tt> finds the intial string of characters satisfying <em>pred</em>, and <tt>string-break/cursors</tt> breaks <em>string</em> at the first character satisfying <em>pred</em>.
+</p>
+<h2 id="Thewholestring">The whole string</h2>
+<p>
+Returns the number of characters in <em>string</em>.
 </p>
 <p>
-The name <tt>span-span</tt> is unfortunate but unavoidable.
+<tt>(string-reverse/cursors </tt><em>string start end</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-<tt>(span-contains </tt><em>haystack needle</em><tt>)</tt> [SRFI 13]
+Returns a string containing the characters of the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive) in reverse order.
 </p>
 <p>
-It is an error if <em>needle</em> and <em>haystack</em> are not both spans.  Returns a cursor referring to <em>haystack</em> indicating the first position of the first subspan in which the characters of <em>needle</em> appear.  If there is no such position (in particular, if either <em>needle</em> or <em>haystack</em> is empty), <tt>#f</tt> is returned.
-</p>
-<h2 id="Thewholecharacterspanorstring">The whole character span or string</h2>
-<p>
-<tt>(span-length </tt><em>span</em><tt>)</tt> [SRFI 13]
+<tt>(string-every/cursors </tt><em>pred string start end</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-Returns the number of characters in <em>span</em>.
+If <em>pred</em> returns true for every character in the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive), then returns what the last call to <em>pred</em> returns, or <tt>#t</tt> if <em>pred</em> is never called.  Returns <tt>#f</tt> otherwise.
 </p>
 <p>
-<tt>(span-reverse </tt><em>span</em><tt>)</tt> [SRFI 13]
+<tt>(string-any/cursors </tt><em>pred string start end</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-Returns a span containing the characters of <em>span</em> in reverse order.
-</p>
-<p>
-<tt>(span-append </tt><em>span</em> ...<tt>)</tt> [SRFI 13]
-</p>
-<p>
-Returns a span containing the characters of the <em>spans</em> in order.
-</p>
-<p>
-<tt>(span-concatenate </tt><em>list</em><tt>)</tt> [SRFI 13]
-</p>
-<p>
-Returns a span containing the characters of the spans and/or strings enumerated in <em>list</em> in order.  This procedure will succeed even if <tt>(apply span-append list-of-spans)</tt> fails due to an implementation limit on the number of arguments a procedure may receive.
-</p>
-<p>
-<tt>(span-concatenate-reverse </tt><em>list</em><tt>)</tt> [SRFI 13]
-</p>
-<p>
-The same as <tt>span-concatenate</tt>, except that <em>list</em> is processed in reverse order.  Note that the individual spans are <em>not</em> processed in reverse order. 
-</p>
-<p>
-This procedure is useful in the construction of procedures that accumulate character data into lists of string buffers, and wish to convert the accumulated data into a single string when done.
- 
+Returns <tt>#f</tt> if <em>pred</em> returns false for each character in the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive), and <tt>#t</tt> otherwise.
 </p>
 <h2 id="Foldingandmapping">Folding and mapping</h2>
 <p>
-<tt>(span-map </tt><em>proc span</em> ...<tt>)</tt> [SRFI 13]
+<tt>(string-map/cursors </tt><em>proc string start end</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-It is an error if <em>proc</em> does not accept as many arguments as there are spans and return a single character.
+Applies <em>proc</em> element-wise to the characters of the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive) and returns a string of the results,
+in order. The dynamic order in which <em>proc</em> is applied to the characters of the string is unspecified. If multiple returns occur from <tt>string-map/cursors</tt>, the values returned by earlier returns are not mutated.
 </p>
 <p>
-Applies <em>proc</em> element-wise to the characters of the <em>spans</em> and returns a span of the results,
-in order. If more than one span is given and not all spans have the same length, <tt>span-map</tt> terminates
-when the shortest span runs out. The dynamic order in which <em>proc</em> is applied to the characters of the spans is unspecified. If multiple returns occur from <tt>span-map</tt>, the values returned by earlier returns are not mutated.
+<tt>(string-for-each/cursors </tt><em>proc string start end</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-<tt>(span-for-each </tt><em>proc span</em> ...<tt>)</tt> [SRFI 13]
+The arguments to <tt>string-for-each/cursors</tt> are like the arguments to <tt>string-map/cursors</tt>, but it calls <em>proc</em> for its
+side effects rather than for its values. Unlike <tt>string-map</tt>, this procedure is guaranteed to call <em>proc</em> exactly once on each of the characters of the strings in order from the first character(s) to the last.  The value returned is unspecified.
 </p>
 <p>
-It is an error if <em>proc</em> does not accept as many arguments as there are strings.
+<tt>(string-for-each-cursor </tt><em>proc string start end</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-The arguments to <tt>span-for-each</tt> are like the arguments to <tt>span-map</tt>, but it calls <em>proc</em> for its
-side effects rather than for its values. Unlike <tt>span-map</tt>, this procedure is guaranteed to call <em>proc</em> exactly once on each of the characters of the spans in order from the first character(s) to the last.  The value returned is unspecified. If more than one span is given and not all spans have the same length, <tt>span-for-each</tt> terminates when the shortest string runs out.
+Applies <em>proc</em> to each of the valid cursors (excluding the pre-start and post-end cursors) of <em>string</em>.  This procedure is guaranteed to call <em>proc</em> exactly once on each of the characters of the strings in order from the first character(s) to the last.  The value returned is unspecified.
 </p>
 <p>
-<tt>(span-fold </tt><em>proc nil span</em> ...<tt>)</tt> [SRFI 13]
+<tt>(string-fold/cursors </tt><em>proc nil string</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-<tt>(span-fold-right </tt><em>proc nil span</em> ...<tt>)</tt> [SRFI 13]
+<tt>(string-fold-right/cursors </tt><em>proc nil string</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-Invokes <em>proc</em> on each character of the <em>spans</em> in forward/reverse order, passing the result of the previous invocation as an additional argument. For the first invocation, <em>nil</em> is used as the additional argument. Returns the result of the last invocation, or <em>nil</em> if there was no invocation.  It is an error if <em>proc</em> does not accept the same number of arguments as there are spans plus one.
+Invokes <em>proc</em> on each character of the <em>strings</em> in forward/reverse order, passing the result of the previous invocation as an additional argument. For the first invocation, <em>nil</em> is used as the additional argument. Returns the result of the last invocation, or <em>nil</em> if there was no invocation.  It is an error if <em>proc</em> does not accept the same number of arguments as there are strings plus one.
 </p>
-<h2 id="Parsingandunparsing">Parsing and unparsing</h2>
+<h2 id="Parsing">Parsing</h2>
 <p>
-<tt>(span-split </tt><em>span</em> [<em>separator</em> [ <em>limit</em> ] ]<tt>)</tt>
-</p>
-<p>
-Returns a list of the words contained in <em>span</em>.  If <em>separator</em> (which is also a character span) is omitted, then the words are separated by one or more whitespace characters (those on which <tt>char-whitespace?</tt> returns <tt>#t</tt>). If <em>separator</em> is supplied, it specifies a span whose characters are to be used as the word separator. The returned list will then have one more item than the number of non-overlapping occurrences of the separator in the string.  If <em>separator</em> is an empty span, then the returned list contains a list of spans, each of which contains a single character. 
+<tt>(string-split/cursors </tt><em>string</em> [<em>separator</em> [ <em>limit ] ] start end</em><tt>)</tt>
 </p>
 <p>
-If <em>limit</em> is provided, at most that many splits occur, and the remainder of <em>span</em> is returned as the final element of the list (thus, the result will have at most <em>limit</em>+1 elements). If <em>limit</em> is not specified, then as many splits as possible are made.  It is an error if <em>limit</em> is not a positive exact integer.
+Returns a list of the words contained in the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive).  If <em>separator</em> (which is also a string) is omitted, then the words are separated by one or more whitespace characters (those on which <tt>char-whitespace?</tt> returns <tt>#t</tt>). If <em>separator</em> is supplied, it specifies a string whose characters are to be used as the word separator. The returned list will then have one more item than the number of non-overlapping occurrences of the separator in the string.  If <em>separator</em> is an empty string, then the returned list contains a list of strings, each of which contains a single character. 
 </p>
 <p>
-<tt>(span-join </tt><em>list</em> [ <em>delim</em> [ <em>grammar</em> ] ]<tt>)</tt> [SRFI 13]
+If <em>limit</em> is provided, at most that many splits occur, and the remainder of <em>string</em> is returned as the final element of the list (thus, the result will have at most <em>limit</em>+1 elements). If <em>limit</em> is not specified, then as many splits as possible are made.  It is an error if <em>limit</em> is not a positive exact integer.
+</p>
+<p>Compatibility note: This procedure replaces SRFI 13's <code>string-tokenize</code> with something modeled after the split operation of Perl, Python, Java, JavaScript, and other languages.</p>
+<h2 id="Filteringandpartitioning">Filtering and partitioning</h2>
+<p>
+<tt>(string-filter/cursors </tt><em>pred string start end</em><tt>)</tt> [SRFI 13]
 </p>
 <p>
-This procedure pastes the elements of <em>list</em> together using <em>delimiter</em>, which is a span.  For convenience, <em>list</em> elements are allowed to be strings or spans or both.  If <em>delimiter</em> is omitted, it is a single space.  The <em>grammar</em> argument is a symbol that determines how the delimiter is used, and defaults to <tt>infix</tt>.  The following values are understood:
-</p>
-<ul><li><tt>infix</tt> means an infix or separator grammar: insert the delimiter between list elements. An empty list will produce an empty string; a singleton list will produce the list's element.
-</li><li><tt>strict-infix</tt> means the same as <tt>infix</tt>, but will signal an error if given an empty list. 
-</li><li><tt>suffix</tt> means a suffix or terminator grammar: insert the delimiter after every list element.
-</li><li><tt>prefix</tt> means a prefix grammar: insert the delimiter before every list element.
-</li></ul><h2 id="Filteringandpartitioning">Filtering and partitioning</h2>
-<p>
-<tt>(span-filter </tt><em>pred span</em><tt>)</tt> [SRFI 13]
+Returns a string containing the characters of the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive) which satisfy <em>pred</em>.
 </p>
 <p>
-Returns a span containing the characters of <em>span</em> which satisfy <em>pred</em>.
+<tt>(string-remove/cursors </tt><em>pred string start end</em><tt>)</tt>
 </p>
 <p>
-<tt>(span-remove </tt><em>pred span</em><tt>)</tt>
-</p>
-<p>
-Returns a span containing the characters of <em>span</em> which do not satisfy <em>pred</em>.
+Returns a string containing the characters of the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive) which do not satisfy <em>pred</em>.
 </p>
 <p>
 Compatibility note:  The SRFI 13 version of this procedure is called <tt>string-delete</tt>, which is inconsistent with the conventions of SRFI 1 and other SRFIs.
 </p>
 <p>
-<tt>(span-partition </tt><em>pred span</em><tt>)</tt>
+<tt>(string-partition/cursors </tt><em>pred string start end</em><tt>)</tt>
 </p>
 <p>
-Returns two values, a span containing the characters of <em>span</em> which satisfy <em>pred</em> and another span containing those which do not.
+Returns two values, a string containing the characters of the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive) which satisfy <em>pred</em> and another string containing those which do not.
 </p>
-<h2 id="Conversion">Conversion</h2>
+<h2 id="Copyingandconnversion">Copying and conversion</h2>
 <p>
-<tt>(string-&gt;span </tt><em>string</em><tt>)</tt>
-</p>
-<p>
-Returns a span that contains the characters of <em>string</em> in order.  Later mutation of <em>string</em> will not affect the value of <em>span</em>.
+<tt>(string-copy/cursors </tt><em>span <em>start end</em></em><tt>)</tt> [R7RS-small]
 </p>
 <p>
-<tt>(span-&gt;string </tt><em>span</em><tt>)</tt>
+<tt>(substring/cursors </tt><em>span start end</em><tt>)</tt> [R7RS-small]
 </p>
 <p>
-Returns a newly allocated string which contains the characters of <em>span</em> in order.
-Later mutation of the string will not affect the value of <em>span</em>.
+These procedures are equivalent, and return a string which contains the characters in <em>string</em> between <em>start</em> (inclusive) and <em>end</em> (exclusive).
 </p>
 <p>
-<tt>(span-&gt;list </tt><em>span</em><tt>)</tt> [R7RS-small]
+<tt>(string-&gt;list/cursors </tt><em>string start end</em><tt>)</tt> [R7RS-small]
 </p>
 <p>
-<tt>(span-&gt;vector </tt><em>span</em><tt>)</tt> [R7RS-small]
+<tt>(string-&gt;vector/cursors </tt><em>string start end</em><tt>)</tt> [R7RS-small]
 </p>
 <p>
-Returns a newly allocated list/vector containing the characters of <em>span</em> in order.
+Returns a newly allocated list/vector containing the characters of the substring of <em>string</em> from <em>start</em> (inclusive) to <em>end</em> (exclusive) in order.
 </p>
-<p>
-<tt>(list-&gt;span </tt><em>list</em><tt>)</tt> [R7RS-small]
-</p>
-<p>
-<tt>(vector-&gt;span </tt><em>vector</em><tt>)</tt> [R7RS-small]
-</p>
-<p>
-Returns a span containing the elements of <em>list</em> or <em>vector</em> in order.  It is an error if any of the elements are not characters.
-</p>
-<p>
-<tt>(reverse-list-&gt;span </tt><em>list</em><tt>)</tt> [SRFI 13]
-</p>
-<p>
-Returns a span whose characters are the elements of <em>list</em> in reverse order.  It is an error if the elements are not characters.
-</p>
-<h2 id="Case">Case</h2>
-<p>
-<tt>(span-upcase </tt><em>span</em><tt>)</tt> [R7RS-small]
-</p>
-<p>
-<tt>(span-downcase </tt><em>span</em><tt>)</tt> [R7RS-small]
-</p>
-<p>
-<tt>(span-titlecase </tt><em>span</em><tt>)</tt> [R7RS-small]
-</p>
-<p>
-<tt>(span-foldcase </tt><em>span</em><tt>)</tt> [R7RS-small]
-</p>
-<p>
-In any implementation of this SRFI based on R6RS or R7RS, these procedures must behave analogously to the corresponding string procedures.  That is, if a call to string procedure <em>x</em> (such as <tt>string-upcase</tt> or <tt>string=?</tt> on a string containing characters <em>y<sub>0</sub> ... y<sub>n</sub></em> produces a string containing characters <em>z<sub>0</sub> ... z<sub>n</sub></em>, then a call to the analogous span procedure <em>x???</em> on a span containing characters <em>y<sub>0</sub> ... y<sub>n</sub></em> must produce a span containing characters <em>z<sub>0</sub> ... z<sub>n</sub></em>.
-</p>
-<p>
-R7RS-small systems may not have <tt>string-titlecase</tt>.  In that case, this SRFI requires that the definition in SRFI 129 be used.
-</p>
-<h2 id="Comparison">Comparison</h2>
-<p>
-<tt>(span=? </tt><em>span<sub>1</sub> span<sub>2</sub> span</em> ...<tt>)</tt> [R7RS-small]
-</p>
-<p>
-<tt>(span&lt;? </tt><em>span<sub>1</sub> span<sub>2</sub> span</em> ...<tt>)</tt> [R7RS-small]
-</p>
-<p>
-<tt>(span&gt;? </tt><em>span<sub>1</sub> span<sub>2</sub> span</em> ...<tt>)</tt> [R7RS-small]
-</p>
-<p>
-<tt>(span&lt;=? </tt><em>span<sub>1</sub> span<sub>2</sub> span</em> ...<tt>)</tt> [R7RS-small]
-</p>
-<p>
-<tt>(span&gt;=? </tt><em>span<sub>1</sub> span<sub>2</sub> span</em> ...<tt>)</tt> [R7RS-small]
-</p>
-<p>
-<tt>(span-ci=? </tt><em>span<sub>1</sub> span<sub>2</sub> span</em> ...<tt>)</tt> [R7RS-small]
-</p>
-<p>
-<tt>(span-ci&lt;? </tt><em>span<sub>1</sub> span<sub>2</sub> span</em> ...<tt>)</tt> [R7RS-small]
-</p>
-<p>
-<tt>(span-ci&gt;? </tt><em>span<sub>1</sub> span<sub>2</sub> span</em> ...<tt>)</tt> [R7RS-small]
-</p>
-<p>
-<tt>(span-ci&lt;=? </tt><em>span<sub>1</sub> span<sub>2</sub> span</em> ...<tt>)</tt> [R7RS-small]
-</p>
-<p>
-<tt>(span-ci&gt;=? </tt><em>span<sub>1</sub> span<sub>2</sub> span</em> ...<tt>)</tt> [R7RS-small]
-</p>
-<p>
-In any implementation of this SRFI based on R6RS or R7RS, the results of these procedures must behave as if the arguments were converted to strings and then passed to the corresponding string procedures.
-</p>
-
 <h1>Implementation</h1>
 
-
-An implementation of a slightly older version of this SRFI is available
-in the <a href="https://github.com/larcenists/larceny/tree/master/lib/SRFI/in-progress">
-<tt>in-progress</tt> directory</a> of the Larceny git repository.  It will be updated
-and posted at the SRFI site after the first round of comments have been received.
+The sample implementation is (not yet) available in the SRFI's repository.  It will be written after a round of comments has been received.
 
 <h1>Copyright</h1>
-Copyright (C) John Cowan, Will Clinger (2015).  All Rights Reserved. 
+Copyright (C) John Cowan (2015).  All Rights Reserved. 
 
 <p>
   Permission is hereby granted, free of charge, to any person
@@ -631,11 +382,11 @@ Copyright (C) John Cowan, Will Clinger (2015).  All Rights Reserved.
   including without limitation the rights to use, copy, modify, merge,
   publish, distribute, sublicense, and/or sell copies of the Software,
   and to permit persons to whom the Software is furnished to do so,
-  subject to the following conditions:
+  subject to the following conditions:</p>
 
 <p>
   The above copyright notice and this permission notice shall be
-  included in all copies or substantial portions of the Software.
+  included in all copies or substantial portions of the Software.</p>
 
 <p>
   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
@@ -645,7 +396,7 @@ Copyright (C) John Cowan, Will Clinger (2015).  All Rights Reserved.
   BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
   ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-  SOFTWARE.
+  SOFTWARE.</p>
 
-  <hr>
+  <hr />
   <address>Editor: <a href="mailto:srfi-editors at srfi dot schemers dot org">Arthur A. Gleckler</a></address></body></html>
