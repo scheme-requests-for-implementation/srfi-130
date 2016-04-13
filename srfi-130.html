@@ -10,8 +10,8 @@
 <html>
   <head>
     <meta name="keywords" content="Scheme, programming language, list processing, SRFI" />
-    <link rev=made href="mailto:shivers@ai.mit.edu" />
-    <title>SRFI 130: String Libraries</title>
+    <link rev=made href="mailto:cowan@ccil.org" />
+    <title>SRFI 130: Cursor-based string library</title>
 
     <!-- Should have a media=all to get, for example, printing to work.
       == But my Netscape will completely ignore the tag if I do that.
@@ -226,7 +226,7 @@ Here is a list of the procedures provided by this SRFI.
 <dd class=proc-index>
 <pre class=proc-index>
 <a href="#string-cursor-start">string-cursor-start</a>    <a href="#string-cursor-end">string-cursor-end</a>
-<a href="#string-cursor-next">string-cursor-next</a>     <a href="#string-cursor-prev">string-cursor-end</a>
+<a href="#string-cursor-next">string-cursor-next</a>     <a href="#string-cursor-prev">string-cursor-prev</a>
 <a href="#string-cursor-forward">string-cursor-forward</a>  <a href="#string-cursor-back">string-cursor-back</a>
 <a href="#string-cursor-eq">string-cursor=?</a>
 <a href="#string-cursor-lt">string-cursor&lt;?</a>        <a href="#string-cursor-gt">string-cursor>?</a>
@@ -279,14 +279,16 @@ Here is a list of the procedures provided by this SRFI.
 <pre class=proc-index>
 <a href="#string-index">string-index</a> <a href="#string-index-right">string-index-right</a>
 <a href="#string-skip">string-skip</a>  <a href="#string-skip-right">string-skip-right</a>
-string-contains</a>
+<a href="#string-contains">string-contains</a>
 </pre>
 
 <dt class=proc-index>The whole string
 <dd class=proc-index>
 <pre class=proc-index>
+<a href="#string-reverse">string-reverse</a>
 <a href="#string-concatenate">string-concatenate</a>  <a href="#string-concatenate-reverse">string-concatenate-reverse</a>
-<a href="#string-for-each-index">string-for-each-index</a>
+<a href="#string-fold">string-fold</a>         <a href="#string-fold-right">string-fold-right</a>
+<a href="#string-for-each-cursor">string-for-each-cursor</a>
 <a href="#string-replicate">string-replicate</a>    <a href="#string-count">string-count</a>
 <a href="#string-replace">string-replace</a>      <a href="#string-split">string-split</a>
 <a href="#string-filter">string-filter</a>       <a href="#string-remove">string-remove</a> 
@@ -321,7 +323,10 @@ fairly common for implementations to store strings internally as UTF-8 or UTF-16
 unit sequences, which means that indexing operations are potentially O(n) rather than O(1).
 Using opaque cursors makes it possible to iterate much more efficiently through such strings
 compared to incrementing or decrementing indexes; however, for backward compatibility,
-the procedures defined in this SRFI accept either cursors or indexes.</p>
+the procedures defined in this SRFI accept either cursors or indexes.
+The results returned are always cursors: the use of indexes is
+preserved mainly for the sake of existing code and for implementer
+convenience.</p>
 <p>
 The operations provided here are entirely independent of the character repertoire supported
 by the implementation.  In particular, this means that the comparison and case conversion
@@ -331,14 +336,14 @@ or for a <code>string-&gt;integer</code> procedure that was proposed for SRFI 13
 Furthermore, string mutation can be
 extremely expensive if the storage used for the string needs to be expanded, particularly
 if the implementation does not use an indirect pointer to it (as in Chicken),
-so this SRFI does not provide for it.</p>
-<p>The low-level procedures of SRFI 13 are specific to the sample implementation, and have been removed
+so this SRFI does not provide for it.
+The low-level procedures of SRFI 13 are specific to the sample implementation, and have been removed
 to make other implementations simpler and easier.</p>
 <p>Many SRFI 13 procedures accept either a predicate, a single character, or a
 <a href="http://srfi.schemers.org/srfi-14/srfi-14.html">SRFI 14</a> character set.
 In this SRFI, only support for predicates is required, though implementations may also support the
-other two alternatives.  A single character is interpreted as a predicate which returns true if its
-argument is the same (in the sense of <code>eql?</code> to that character); a character set is interpreted
+other two alternatives.  In that case, a single character is interpreted as a predicate which returns true if its
+argument is the same (in the sense of <code>eqv?</code>) to that character; a character set is interpreted
 as a predicate which returns true if its argument belongs to that character set.
 In SRFI 13, character sets are inherently more efficient than predicates
 <a class="ext-link" href="http://srfi.schemers.org/srfi-13/mail-archive/msg00052.html">
@@ -350,13 +355,14 @@ Python, Java, JavaScript, and other languages.
 </p>
 <p>The search procedures in SRFI 13 return either an index or <code>#f</code> if the search fails.
 Their counterparts in this SRFI return cursors.  Left-to-right searches return a cursor representing
-the (first) matching character, or the post-end cursor if there is no match; right-to-left searches
-return a cursor representing the <i>successor</i> of the (first) matching character, or the
-start cursor if there is no match.  This convention was devised by Alan Watson.</p>
+the leftmost matching character, or the post-end cursor if there is no match; right-to-left searches
+return a cursor representing the <i>successor</i> of the rightmost matching character, or the
+start cursor if there is no match.  This convention was devised by Alan Watson
+and implemented in Chibi Scheme.</p>
 <p>
 In short, this SRFI is intended to help move the practice of Scheme programming
-away from mutable strings, string indexes, and SRFI 13, while maintaining some degree
-of backward compatibility.  It does not require any particular run-time efficiencies from its procedures.
+away from mutable strings, string indexes, and SRFI 13, while largely maintaining 
+backward compatibility.  It does not require any particular run-time efficiencies from its procedures.
 
 
 <!--========================================================================-->
@@ -373,13 +379,14 @@ ranging from 0 to the length of the string they refer to, cursors are opaque obj
 that point into strings.
 However, they are not required to belong to a disjoint type, as long as they are either disjoint
 from indexes or identical to indexes.  For example, they may be negative exact integers representing
-indexes into a byte array underlying the string.  It is also possible to implement cursors as a record type.
+indexes into a byte array underlying the string.  It is also possible to implement cursors as a record type
+or an implementation-specific primitive type.
 Additionally, in implementations where no provision has been made for cursors, or there is no benefit in
 implementing them separately because strings are in fact arrays of fixed-length characters, it is useful
 to allow indexes and cursors to be the same thing.
 
 <p>It is an error to make any use of a cursor referring to a string after
-the string has been mutated by a procedure like <code>string-set!</code>,
+the string, or any string that shares storage with it, has been mutated by a procedure like <code>string-set!</code>,
 <code>string-copy!</code>, or <code>string-fill!</code>.
 
 <p>
@@ -387,8 +394,8 @@ Given a string of length <em>n</em>, there are <em>n</em> + 1 valid cursors
 that refer to it: one for each character in the string,
 and one for the position just after the last character, known as the "post-end cursor".
 The cursor for the first (or zeroth) position in the string is known as the "start cursor".
-These additional positions are provided for backward and forward iteration respectively,
-and also because when creating a string from cursors the second cursor argument is exclusive.
+The post-end cursor is provided because
+when creating a string from cursors the second cursor argument is exclusive.
 It is an error if a cursor argument is not one of the valid cursors for the string argument.
 The index analogue of the post-end cursor is <em>n</em>.
 </p>
@@ -415,30 +422,32 @@ a result which shares storage with one or more of their string arguments:
     string-concatenate string-concatenate-reverse</code>
     string-pad string-pad-right
     string-trim string-trim-right string-trim-both
-    string-filter string-remove
+    string-split string-filter string-remove
 </pre>
 
 <p>In particular, if the result is the same (in the sense of <code>string=?</code>)
 as any of the arguments, <i>any</i> implementation of the above procedures may return
 the string argument
-without copying it. Other procedures such as <code>substring/cursors</code>
-and <code>string-copy/cursors</code>, as well as all the
+without copying it. Other procedures such as 
+<code>string-copy/cursors</code>, as well as all the
 <abbr title="Revised<sup>7</sup> Report on Scheme"><a href="#R7RS">R7RS</a></abbr> procedures,
 are not permitted to return shared results.
+If a shared value is returned, it may be mutable or immutable.
 
 
 <!--========================================================================-->
 <h2><a name="NamingConventions">Naming conventions</a></h2>
 
 <p>
-This library contains a large number of procedures, but they follow
+The procedures of this SRFI follow
 a consistent naming scheme, and are consistent with the conventions
 developed in SRFI 1. The names are composed of smaller lexemes
 in a regular way that exposes the structure and relationships between the
 procedures. This should help the programmer to recall or reconstitute the name
-of the particular procedure that he needs when writing his own code. In
+of the desired procedure.  In
 particular, the order of common parameters is consistent across the
-different procedures.  Procedures that have left/right directional variants
+different procedures.
+<p>Procedures that have left/right directional variants
 use no suffix to specify left-to-right operation, <code>-right</code> to specify
 right-to-left operation, and <code>-both</code> to specify both.
 This is a general convention that has been established in other SRFIs;
@@ -459,8 +468,8 @@ In the following procedure specifications:
       a substring within a string parameter, and typically restrict a procedure's
       action to the indicated substring.  When omitted, they default
       to 0 and the length of the string, respectively; or from another
-      point of view, they default to the cursor for the first character
-      in the string and the post-end cursor, respectively. It
+      point of view, they default to the start cursor
+      and the post-end cursor, respectively. For indexes, it
       must be the case that 0 &lt;= <var>start</var> &lt;= <var>end</var> 
       &lt;= <code>(string-length <var>s</var>)</code>, for
       the corresponding parameter <var>s</var> when <var>start</var>
@@ -513,7 +522,7 @@ takes two required parameters
 and zero or more optional parameters (<var>dict<sub>2</sub> ...</var>).
 
 <p>
-If a procedure is said to return "unspecified," this means that the procedure
+If a procedure's return vlue is said to be "unspecified," this means that the procedure
 returns a single arbitrary value. Such a procedure is not even
 required to be consistent from call to call. 
 <!--========================================================================-->
@@ -522,7 +531,7 @@ required to be consistent from call to call.
 
 <!--========================================================================-->
 <h3><a name="CursorOperations">Cursor operations</a></h3>
-These procedures are mostly taken from Chibi Scheme.
+<p>These procedures are mostly taken from Chibi Scheme.
 
 <dl>
 <!--
@@ -543,12 +552,12 @@ These procedures are mostly taken from Chibi Scheme.
 <dt class=proc-def1>
 <a name="string-cursor-next"></a>
 <a name="string-cursor-prev"></a>
-<code class=proc-def>string-cursor-prev</code><var> s cursor → cursor</var>
-<dt class=proc-defn><code class=proc-def>string-cursor-next</code><var> s cursor → cursor</var>
+<code class=proc-def>string-cursor-next</code><var> s cursor → cursor</var>
+<dt class=proc-defn><code class=proc-def>string-cursor-prev</code><var> s cursor → cursor</var>
 <dd class=proc-def>
     Returns the cursor into <var>s</var> following/preceding <var>cursor</var>.
     If <var>cursor</var> is an index, returns one more/less than <var>cursor</var>.
-    It is an error if <var>cursor</var> is the start/post-end cursor of <var>s</var>.
+    It is an error if <var>cursor</var> is the post-end/start cursor of <var>s</var>.
 </dd>
 
 <!--
@@ -571,10 +580,10 @@ These procedures are mostly taken from Chibi Scheme.
 ============================================================================-->
 <dt class=proc-def1>
 <a name="string-cursor-eq"></a>
-<a name="string-lt"></a>
-<a name="string-gt"></a>
-<a name="string-le"></a>
-<a name="string-ge"></a>
+<a name="string-cursor-lt"></a>
+<a name="string-cursor-gt"></a>
+<a name="string-cursor-le"></a>
+<a name="string-cursor-ge"></a>
 <code class=proc-def>string-cursor=?</code><var> s cursor<sub>1</sub> cursor<sub>2</sub> → boolean</var>
 <dt class=proc-defi><code class=proc-def>string-cursor&lt;?</code><var> s cursor<sub>1</sub> cursor<sub>2</sub> → boolean</var>
 <dt class=proc-defi><code class=proc-def>string-cursor>?</code><var> s cursor<sub>1</sub> cursor<sub>2</sub> → boolean</var>
@@ -599,8 +608,8 @@ These procedures are mostly taken from Chibi Scheme.
 ==== string-cursor->index string-index->cursor
 ============================================================================-->
 <dt class=proc-def1>
-<a name="string-cursor->index"></a>
-<a name="string-index->cursor"></a>
+<a name="string-cursor2index"></a>
+<a name="string-index2cursor"></a>
 <code class=proc-def>string-cursor->index</code><var> s cursor → index</var>
 <dt class=proc-defn><code class=proc-def>string-index->cursor</code><var> s index → cursor</var>
 <dd class=proc-def>
@@ -668,7 +677,7 @@ These procedures are mostly taken from Chibi Scheme.
 <code class=proc-def>string-tabulate</code><var> proc len → string</var>
 <dd class=proc-def>
     <var>Proc</var> is an integer → char procedure. Construct a string of size <var>len</var>
-    by applying <var>proc</var> to each index to produce the corresponding string
+    by applying <var>proc</var> to each value from 0 (inclusive) to <var>len</var> (exclusive) to produce the corresponding string
     element. The order in which <var>proc</var> is applied to the indexes is not
     specified.
 
@@ -779,6 +788,8 @@ cause overflow when constructing large (<em>e.g.</em>, megabyte) strings with
     <abbr title="Revised<sup>7</sup> Report on Scheme"><a href="#R7RS">R7RS</a></abbr> procedures
     <code>string->list</code> and <code>string->vector</code>
     by accepting either cursors or indexes.
+    In addition, the result of <code>substring</code> cannot share storage
+    with <var>s</var>.
 <!--
 ==== reverse-list->string
 ============================================================================-->
@@ -924,7 +935,7 @@ cause overflow when constructing large (<em>e.g.</em>, megabyte) strings with
     Build a string of length <var>len</var> comprised of <var>s</var> padded on the left (right)
     by as many occurrences of the character <var>char</var> as needed. If <var>s</var> has more
     than <var>len</var> chars, it is truncated on the left (right) to length <var>len</var>. <var>Char</var>
-    defaults to #\space.
+    defaults to <code>#\space</code>.
 
     <p>
     If <var>len</var> &lt;= <var>end</var>-<var>start</var>, the returned value is allowed to share storage
@@ -976,7 +987,7 @@ cause overflow when constructing large (<em>e.g.</em>, megabyte) strings with
 <dd class=proc-def>
 Return the length of the longest common prefix/suffix of the two strings.
 For prefixes, this is equivalent to the "mismatch index" for the strings
-(modulo the <var>start</var>i index offsets).
+(modulo the start cursors).
 
 <p>
 The optional start/end cursors or indexes restrict the comparison to the indicated
@@ -1043,12 +1054,10 @@ in all the other SRFI 130 procedures.
 
 <p>
 The skip functions are similar, but use the complement of the criteria:
-they search for the first char that <em>doesn't</em> satisfy the test. <em>E.g.</em>, 
+they search for the first char that <em>doesn't</em> satisfy <var>pred</var>. <em>E.g.</em>, 
 to skip over initial whitespace, say
 <pre class=code-example>
-(cond ((string-skip s char-set:whitespace) =&gt;
-       (lambda (i) ...)) ; s[i] is not whitespace.
-      ...)
+(substring/cursors s (string-skip s char-whitespace?))
 </pre>
 <p>Note that the result is always a cursor, even when <var>start</var> and <var>end</var>
 are indexes.  Use <code>string-cursor->index</code> to convert the result to an index.</p>
@@ -1088,7 +1097,7 @@ are indexes.  Use <code>string-cursor->index</code> to convert a cursor result t
 <p>
 The name of this procedure does not end with a question mark — this is to
 indicate that it does not return a simple boolean (<code>#t</code> or <code>#f</code>). Rather,
-it returns either false (<code>#f</code>) or an exact non-negative integer.
+it returns either false (<code>#f</code>) or a cursor.
 
 </dl>
 
@@ -1097,6 +1106,32 @@ it returns either false (<code>#f</code>) or an exact non-negative integer.
 
 <dl>
 
+<!--
+==== string-reverse
+============================================================================-->
+<dt class=proc-def>
+<a name="string-reverse"></a>
+<code class=proc-def>string-reverse&nbsp;</code><var> s [start end] -> string</var>
+<dd class=proc-def>
+Reverse the string.
+
+<p>
+<code>string-reverse</code> returns the result string 
+and does not alter its <var>s</var> parameter. 
+
+<pre class=code-example>
+(string-reverse "Able was I ere I saw elba.") 
+    =&gt; ".able was I ere I saw elbA"
+(string-reverse "Who stole the spoons?" 14 20)
+    =&gt; "snoops"
+
+</pre>
+
+<p>
+Unicode note: Reversing a string simply reverses the sequence of
+code-points it contains. So a combining diacritic <var>a</var> 
+coming <em>after</em> a base character <var>b</var> in string <var>s</var> 
+would come out <em>before</em> <var>b</var> in the reversed result.
 <!--
 ==== string-concatenate
 ============================================================================-->
@@ -1219,25 +1254,23 @@ Examples:
 The right-fold combinator is sometimes called a "catamorphism."
 
 <!--
-==== string-for-each-index
+==== string-for-each-cursor
 ============================================================================-->
 <dt class=proc-def>
-<a name="string-for-each-index"></a>
-<code class=proc-def>string-for-each-index</code><var> proc s [start end] → unspecified</var>
+<a name="string-for-each-cursor"></a>
+<code class=proc-def>string-for-each-cursor</code><var> proc s [start end] → unspecified</var>
 <dd class=proc-def>
-Apply <var>proc</var> to each index of <var>s</var>, in order. The optional <var>start/end</var>
+Apply <var>proc</var> to each cursor of <var>s</var>, in order, excluding the post-end cursor.  The optional <var>start/end</var>
 pairs restrict the endpoints of the loop. This is simply a
 method of looping over a string that is guaranteed to be safe
 and correct.
 
 Example:
 <pre class=code-example>
-(let* ((len (string-length s))
-       (ans (make-string len)))
-  (string-for-each-index
-      (lambda (i) (string-set! ans (- len i) (string-ref s i)))
-      s)
-  ans)
+(let ((len (string-length s)))
+  (string-for-each-cursor
+      (lambda (i) (write-char i))
+      s))
 </pre>
 
 <!--
@@ -1247,7 +1280,7 @@ Example:
 <a name="string-replicate"></a>
 <code class=proc-def>string-replicate</code><var> s from to [start end] → string</var>
 <dd class=proc-def>
-    This is the "extended substring" procedure that implements replicated
+    This is an "extended substring" procedure that implements replicated
     copying of a substring of some string.
 
     <p>
@@ -1361,10 +1394,10 @@ an empty <var>s</var> produces the empty list; if it is <code>strict-infix</code
 signals an error.  The values <code>prefix</code> and <code>suffix</code> cause a leading/trailing empty
 string in the result to be suppressed.</p>
 <p>
-If <em>limit</em> is provided, at most that many splits occur, and the remainder of <em>string</em>
+If <em>limit</em> is a non-negative exact integer, at most that many splits occur, and the remainder of <em>string</em>
 is returned as the final element of the list (thus, the result will have at most <em>limit</em>+1 elements).
-If <em>limit</em> is not specified, then as many splits as possible are made.
-It is an error if <em>limit</em> is not a non-negative exact integer.
+If <em>limit</em> is not specified or is <code>#f</code>, then as many splits as possible are made.
+It is an error if <em>limit</em> is any other value.
 </p>
 
 <!--
@@ -1372,7 +1405,7 @@ It is an error if <em>limit</em> is not a non-negative exact integer.
 ============================================================================-->
 <dt class=proc-def1>
 <a name="string-filter"></a>
-<a name="string-delete"></a>
+<a name="string-remove"></a>
 <code class=proc-def>string-filter</code><var> pred s [start end] → string</var>
 <dt class=proc-defn><code class=proc-def>string-remove</code><var> pred s [start end] → string</var>
 <dd class=proc-def>
@@ -1434,10 +1467,17 @@ In short, I've written the reference implementation to make it as painless
 as possible for an implementor — or a regular programmer — to adopt this
 library and get good results with it.
 </blockquote>
+<p>Other implementations may be provided as well.
 <!--========================================================================-->
-<h1><a name="Acknowledgements">Acknowledgements (by Olin Shivers)</a></h1>
+<h1><a name="Acknowledgements">Acknowledgements</a></h1>
 
 <p>
+Thanks to the members of the SRFI 130 mailing list who made this SRFI
+what it now is:  Per Bothner, Art Gleckler, Shiro Kawai, Jim Rees, and
+especially Alex Shinn, whose idea it was to make cursors and indexes
+disjoint.  The following acknowledgements by Olin Shivers are taken from
+SRFI 13:
+<blockquote>
 The design of this library benefited greatly from the feedback provided during
 the SRFI discussion phase. Among those contributing thoughtful commentary and
 suggestions, both on the mailing list and by private discussion, were Paolo
@@ -1465,17 +1505,12 @@ results, of course.
 During this document's long development period, great patience was exhibited
 by Mike Sperber, who is the editor for the SRFI, and by Hillary Sullivan,
 who is not.
+</blockquote>
 
 <!--========================================================================-->
 <h1><a name="Links">References &amp; links</a></h1>
 
 <dl>
-
-<dt class=biblio><strong><a name="Case-map">[Case-map]</a></strong>
-<dd>
-    Case mappings. <br>
-    Unicode Technical Report 21. <br>
-    <a href="http://www.unicode.org/unicode/reports/tr21/">http://www.unicode.org/unicode/reports/tr21/</a>
 
 <dt class=biblio><strong><a name="CommonLisp">[CommonLisp]</a></strong></dt>
 <dd><em>Common Lisp: the Language.</em><br>
@@ -1489,20 +1524,6 @@ The Common Lisp "HyperSpec," produced by Kent Pitman, is essentially
 the ANSI spec for Common Lisp:
 <a href="http://www.harlequin.com/education/books/HyperSpec/">
 http://www.harlequin.com/education/books/HyperSpec/</a>.
-
-<dt class=biblio><strong><a name="Java">[Java]</a></strong>
-<dd>
-    The following URLs provide documentation on relevant Java classes. <br>
-
-    <a href="http://java.sun.com/products/jdk/1.2/docs/api/java/lang/Character.html">http://java.sun.com/products/jdk/1.2/docs/api/java/lang/Character.html</a>
-    <br>
-    <a href="http://java.sun.com/products/jdk/1.2/docs/api/java/lang/String.html">http://java.sun.com/products/jdk/1.2/docs/api/java/lang/String.html</a>
-    <br>
-    <a href="http://java.sun.com/products/jdk/1.2/docs/api/java/lang/StringBuffer.html">http://java.sun.com/products/jdk/1.2/docs/api/java/lang/StringBuffer.html</a>
-    <br>
-    <a href="http://java.sun.com/products/jdk/1.2/docs/api/java/text/Collator.html">http://java.sun.com/products/jdk/1.2/docs/api/java/text/Collator.html</a>
-    <br>
-    <a href="http://java.sun.com/products/jdk/1.2/docs/api/java/text/package-summary.html">http://java.sun.com/products/jdk/1.2/docs/api/java/text/package-summary.html</a>
 
 <dt class=biblio><strong><a name="MIT-Scheme">[MIT-Scheme]</a></strong>
 <dd>
@@ -1540,17 +1561,6 @@ http://www.harlequin.com/education/books/HyperSpec/</a>.
     The SRFI 14 char-set library defines a character-set data type,
     which is used by some procedures in this library.
 
-<dt class=biblio><strong><a name="Unicode">[Unicode]</a></strong>
-<dd>
-    <a href="http://www.unicode.org/">http://www.unicode.org/</a>
-
-<dt class=biblio><strong><a name="UnicodeData">[UnicodeData]</a></strong>
-<dd>
-    The Unicode character database. <br>
-    <a href="ftp://ftp.unicode.org/Public/UNIDATA/UnicodeData.txt">ftp://ftp.unicode.org/Public/UNIDATA/UnicodeData.txt</a>
-    <br>
-    <a href="ftp://ftp.unicode.org/Public/UNIDATA/UnicodeData.html">ftp://ftp.unicode.org/Public/UNIDATA/UnicodeData.html</a>
-
 </dl>
 
 <!--========================================================================-->
@@ -1558,7 +1568,7 @@ http://www.harlequin.com/education/books/HyperSpec/</a>.
 
     
 <p>
-Copyright (C) Olin Shivers (1998, 1999, 2000) or John Cowan (2016).
+Copyright (C) Olin Shivers (1998, 1999, 2000) and John Cowan (2016).
 
 <p>
 Permission is hereby granted, free of charge, to any person obtaining
@@ -1586,3 +1596,4 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 </body>
 </html>
 
+<!--FIXME string-reverse string-map string-for-each -->
