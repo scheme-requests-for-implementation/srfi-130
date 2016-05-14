@@ -43,6 +43,7 @@
 
 
 ;;; Cursor operations
+(define (string-cursor? x) (and (exact? x) (integer? x) (>= x 0)))
 (define (string-cursor-start s) 0)
 (define (string-cursor-end s) (string-length s))
 (define (string-cursor-prev s n) (- n 1))
@@ -755,15 +756,8 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; string-copy/cursors! to tstart from [fstart fend]
+;;; %string-copy/cursors! to tstart from [fstart fend]
 ;;; 	Guaranteed to work, even if s1 eq s2.
-
-(define (string-copy/cursors! to tstart from . maybe-fstart+fend)
-  (let-string-start+end (fstart fend) string-copy/cursors! from maybe-fstart+fend
-    (check-arg integer? tstart string-copy/cursors!)
-    (check-substring-spec string-copy/cursors! to tstart (+ tstart (- fend fstart)))
-    (%string-copy/cursors! to tstart from fstart fend)))
-
 ;;; Library-internal routine
 (define (%string-copy/cursors! to tstart from fstart fend)
   (if (> fstart tstart)
@@ -803,6 +797,23 @@
   (let-string-start+end2 (t-start t-end p-start p-end)
                          string-contains text pattern maybe-starts+ends
     (%kmp-search pattern text char=? p-start p-end t-start t-end)))
+
+(define (string-contains-right text pattern . maybe-starts+ends)
+  (let-string-start+end2 (t-start t-end p-start p-end)
+                         string-contains-right text pattern maybe-starts+ends
+    (let* ((t-len (string-length text))
+           (p-len (string-length pattern))
+           (p-size (- p-end p-start))
+           (rt-start (- t-len t-end))
+           (rt-end (- t-len t-start))
+           (rp-start (- p-len p-end))
+           (rp-end (- p-len p-start))
+           (res (%kmp-search (string-reverse pattern)
+                             (string-reverse text)
+                             char=? rp-start rp-end rt-start rt-end)))
+      (if res
+        (- t-len res p-size)
+        #f))))
 
 ;;; Knuth-Morris-Pratt string searching
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1048,47 +1059,6 @@
 
 ;;; string-concatenate        string-list -> string
 ;;; string-concatenate/shared string-list -> string
-;;; string-append/shared s ... -> string
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; STRING-APPEND/SHARED has license to return a string that shares storage
-;;; with any of its arguments. In particular, if there is only one non-empty
-;;; string amongst its parameters, it is permitted to return that string as
-;;; its result. STRING-APPEND, by contrast, always allocates new storage.
-;;;
-;;; STRING-CONCATENATE & STRING-CONCATENATE/SHARED are passed a list of
-;;; strings, which they concatenate into a result string. STRING-CONCATENATE
-;;; always allocates a fresh string; STRING-CONCATENATE/SHARED may (or may
-;;; not) return a result that shares storage with any of its arguments. In
-;;; particular, if it is applied to a singleton list, it is permitted to
-;;; return the car of that list as its value.
-
-(define (string-append/shared . strings) (string-concatenate/shared strings))
-
-(define (string-concatenate/shared strings)
-  (let lp ((strings strings) (nchars 0) (first #f))
-    (cond ((pair? strings)			; Scan the args, add up total
-	   (let* ((string  (car strings))	; length, remember 1st 
-		  (tail (cdr strings))		; non-empty string.
-		  (slen (string-length string)))
-	     (if (zero? slen)
-		 (lp tail nchars first)
-		 (lp tail (+ nchars slen) (or first strings)))))
-
-	  ((zero? nchars) "")
-
-	  ;; Just one non-empty string! Return it.
-	  ((= nchars (string-length (car first))) (car first))
-
-	  (else (let ((ans (make-string nchars)))
-		  (let lp ((strings first) (i 0))
-		    (if (pair? strings)
-			(let* ((s (car strings))
-			       (slen (string-length s)))
-			  (%string-copy/cursors! ans i s 0 slen)
-			  (lp (cdr strings) (+ i slen)))))
-		  ans)))))
-			
-
 ; Alas, Scheme 48's APPLY blows up if you have many, many arguments.
 ;(define (string-concatenate strings) (apply string-append strings))
 
@@ -1259,7 +1229,7 @@
       (cond ((string-cursor=? s c end) (reverse r))
             ((>= n limit) (reverse (cons (substring s c end) r)))
             (else (loop (cons (string (string-ref s c)) r)
-                        (string-cursor-forward s c 1)
+                        (string-cursor-next s c)
                         (+ n 1)))))))
 
 (define (%string-split s start end delimiter grammar limit)
@@ -1276,9 +1246,9 @@
           (if i
             (let ((fragment (substring/cursors s c i)))
               (if (and (= n 0) (eq? grammar 'prefix) (string-null? fragment))
-                (scan r (string-cursor-forward s i dlen) (+ n 1))
+                (scan r (+ i dlen) (+ n 1))
                 (scan (cons fragment r) 
-                      (string-cursor-forward s i dlen)
+                      (+ i dlen)
                       (+ n 1))))
             (finish r c)))))
     (scan '() start 0)))
@@ -1419,6 +1389,8 @@
 		     string-join))
 
 	     (else "")))))		; Special-cased for infix grammar.
+
+(define string-ref/cursor string-ref)
 
 
 ;;; Porting & performance-tuning notes

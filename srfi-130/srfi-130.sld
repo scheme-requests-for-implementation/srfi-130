@@ -19,7 +19,7 @@
   (export string-prefix-length string-suffix-length
           string-prefix? string-suffix?)
   (export string-index string-index-right string-skip string-skip-right
-          string-contains)
+          string-contains string-contains-right)
   (export string-reverse string-concatenate string-concatenate-reverse
           string-fold string-fold-right string-for-each-cursor
           string-replicate string-count string-replace

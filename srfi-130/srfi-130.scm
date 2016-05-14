@@ -1,7 +1,7 @@
 (module srfi-130 ()
   (import scheme)
-  (import (only chicken include receive error let-optionals*))
-  (export string-cursor-start string-cursor-end
+  (import (only chicken include error))
+  (export string-cursor? string-cursor-start string-cursor-end
           string-cursor-prev string-cursor-next
           string-cursor-forward string-cursor-back
           string-cursor=? string-cursor<? string-cursor>?
@@ -18,10 +18,11 @@
   (export string-prefix-length string-suffix-length
           string-prefix? string-suffix?)
   (export string-index string-index-right string-skip string-skip-right
-          string-contains)
+          string-contains string-contains-right)
   (export string-reverse string-concatenate string-concatenate-reverse
           string-fold string-fold-right string-for-each-cursor
           string-replicate string-count string-replace
           string-split string-filter string-remove)
+  (include "macros.scm")
   (include "portable.scm")
 )
