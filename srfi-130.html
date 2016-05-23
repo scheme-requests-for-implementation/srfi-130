@@ -605,13 +605,13 @@ required to be consistent from call to call.
 <a name="string-cursor-gt"></a>
 <a name="string-cursor-le"></a>
 <a name="string-cursor-ge"></a>
-<code class=proc-def>string-cursor=?</code><var> s cursor<sub>1</sub> cursor<sub>2</sub> → boolean</var>
-<dt class=proc-defi><code class=proc-def>string-cursor&lt;?</code><var> s cursor<sub>1</sub> cursor<sub>2</sub> → boolean</var>
-<dt class=proc-defi><code class=proc-def>string-cursor>?</code><var> s cursor<sub>1</sub> cursor<sub>2</sub> → boolean</var>
-<dt class=proc-defi><code class=proc-def>string-cursor&lt;=?</code><var> s cursor<sub>1</sub> cursor<sub>2</sub> → boolean</var>
-<dt class=proc-defn><code class=proc-def>string-cursor>=?</code><var> s cursor<sub>1</sub> cursor<sub>2</sub> → boolean</var>
+<code class=proc-def>string-cursor=?</code><var> cursor<sub>1</sub> cursor<sub>2</sub> → boolean</var>
+<dt class=proc-defi><code class=proc-def>string-cursor&lt;?</code><var> cursor<sub>1</sub> cursor<sub>2</sub> → boolean</var>
+<dt class=proc-defi><code class=proc-def>string-cursor>?</code><var> cursor<sub>1</sub> cursor<sub>2</sub> → boolean</var>
+<dt class=proc-defi><code class=proc-def>string-cursor&lt;=?</code><var> cursor<sub>1</sub> cursor<sub>2</sub> → boolean</var>
+<dt class=proc-defn><code class=proc-def>string-cursor>=?</code><var> cursor<sub>1</sub> cursor<sub>2</sub> → boolean</var>
 <dd class=proc-def>
-    Compares two cursors or two indexes pointing into <var>s</var>.
+    Compares two cursors or two indexes pointing into the same string.
 
 <!--
 ==== string-cursor-diff
@@ -620,7 +620,8 @@ required to be consistent from call to call.
 <a name="string-cursor-diff"></a>
 <code class=proc-def>string-cursor-diff</code><var> s start end → nchars</var>
 <dd class=proc-def>
-    Returns the number of characters between <var>start</var> and <var>end</var>.
+    Returns the number of characters between <var>start</var> and <var>end</var>
+    in string <var>s</var>.
     Note that the result is always non-negative if <var>start</var>
     and <var>end</var> are a valid start-end pair.
 </dd>
@@ -1073,7 +1074,7 @@ the first position considered is
     <code>(string-cursor-prev <var>end</var>)</code>,
 whereas when searching left-to-right, the first index considered is
       <var>start</var>.
-That is, the start/end indexes describe a same half-open interval
+That is, the start/end indexes describe the same half-open interval
 [<var>start</var>,<var>end</var>) in these procedures that they do
 in all the other SRFI 130 procedures.
 
@@ -1085,7 +1086,9 @@ to skip over initial whitespace, say
 (substring/cursors s (string-skip s char-whitespace?))
 </pre>
 <p>Note that the result is always a cursor, even when <var>start</var> and <var>end</var>
-are indexes.  Use <code>string-cursor->index</code> to convert the result to an index.</p>
+are indexes.  Use <code>string-cursor->index</code> to convert the result to an index.
+Therefore, these four functions are not entirely compatible with their
+SRFI 13 counterparts, which return <code>#f</code> on failure.</p>
 <p>These functions can be trivially composed with <code>string-take</code> and
 <code>string-drop</code> to produce take-while, drop-while, span, and break
 procedures without loss of efficiency.</p>
@@ -1298,8 +1301,9 @@ Example:
 <pre class=code-example>
 (let ((s "abcde") (v '()))
   (string-for-each-cursor
-    (lambda (cur) (set! v (cons (char->integer (string-ref s cur)) v)))
-    s) =&gt; (101 100 99 98 97)
+    (lambda (cur) (set! v (cons (char->integer (string-ref/cursor s cur)) v)))
+    s)
+  v) =&gt; (101 100 99 98 97)
 </pre>
 
 <!--
@@ -1356,7 +1360,7 @@ Example:
     dispensation when <var>from</var>=<var>to</var>.
 
     <p>
-    Compatibility note:  <code>string-replicate</code> is identical to the <code>string-replicate</code>
+    Compatibility note:  <code>string-replicate</code> is identical to the <code>xsubstring</code>
     procedure of <a href="#SRFI-13">SRFI 13</a>, except that the <var>to</var> argument is required.
 
 <!--
