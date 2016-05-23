@@ -43,7 +43,7 @@
 
 
 ;;; Cursor operations
-(define (string-cursor? x) (and (exact? x) (integer? x) (>= x 0)))
+(define (string-cursor? x) (and (integer? x) (exact? x) (>= x 0)))
 (define (string-cursor-start s) 0)
 (define (string-cursor-end s) (string-length s))
 (define (string-cursor-prev s n) (- n 1))
@@ -577,24 +577,27 @@
 (define (string-trim s . criterion+start+end)
   (let-optionals* criterion+start+end ((criterion char-whitespace?) rest)
     (let-string-start+end (start end) string-trim s rest
-      (cond ((string-skip s criterion start end) =>
-	     (lambda (i) (%substring/cursors s i end)))
-	    (else "")))))
+      (let ((i (string-skip s criterion start end)))
+        (if (= i end)
+            ""
+	    (%substring/cursors s i end))))))
 
 (define (string-trim-right s . criterion+start+end)
   (let-optionals* criterion+start+end ((criterion char-whitespace?) rest)
     (let-string-start+end (start end) string-trim-right s rest
-      (cond ((string-skip-right s criterion start end) =>
-	     (lambda (i) (%substring/cursors s start (+ 1 i))))
-	    (else "")))))
+      (let ((i (string-skip-right s criterion start end)))
+        (if (= i start)
+            ""
+	    (%substring/cursors s start i))))))
 
 (define (string-trim-both s . criterion+start+end)
   (let-optionals* criterion+start+end ((criterion char-whitespace?) rest)
     (let-string-start+end (start end) string-trim-both s rest
-      (cond ((string-skip s criterion start end) =>
-	     (lambda (i)
-	       (%substring/cursors s i (+ 1 (string-skip-right s criterion i end)))))
-	    (else "")))))
+      (let ((i (string-skip s criterion start end)))
+        (if (= i end)
+            ""
+            (%substring/cursors
+             s i (string-skip-right s criterion i end)))))))
 
 
 (define (string-pad-right s n . char+start+end)
@@ -677,14 +680,18 @@
   (let-string-start+end (start end) string-index str maybe-start+end
     (cond ((char? criterion)
 	   (let lp ((i start))
-	     (and (< i end)
-		  (if (char=? criterion (string-ref str i)) i
-		      (lp (+ i 1))))))
+	     (if (< i end)
+		 (if (char=? criterion (string-ref str i))
+                     i
+		     (lp (+ i 1)))
+                 end)))
 	  ((procedure? criterion)
 	   (let lp ((i start))
-	     (and (< i end)
-		  (if (criterion (string-ref str i)) i
-		      (lp (+ i 1))))))
+	     (if (< i end)
+                 (if (criterion (string-ref str i))
+                     i
+                     (lp (+ i 1)))
+                 end)))
 	  (else (error "Second param is neither char nor predicate procedure."
 		       string-index criterion)))))
 
@@ -697,7 +704,7 @@
 		      (lp (- i 1))))))
 	  ((procedure? criterion)
 	   (let lp ((i (- end 1)))
-	     (if (>= i start) start
+	     (if (< i start) start
 		  (if (criterion (string-ref str i)) (+ i 1)
 		      (lp (- i 1))))))
 	  (else (error "Second param is neither char nor predicate procedure."
@@ -707,15 +714,18 @@
   (let-string-start+end (start end) string-skip str maybe-start+end
     (cond ((char? criterion)
 	   (let lp ((i start))
-	     (and (< i end)
-		  (if (char=? criterion (string-ref str i))
-		      (lp (+ i 1))
-		      i))))
+	     (if (< i end)
+		 (if (char=? criterion (string-ref str i))
+		     (lp (+ i 1))
+		     i)
+                 end)))
 	  ((procedure? criterion)
 	   (let lp ((i start))
-	     (and (< i end)
-		  (if (criterion (string-ref str i)) (lp (+ i 1))
-		      i))))
+	     (if (< i end)
+		 (if (criterion (string-ref str i))
+                     (lp (+ i 1))
+		     i)
+                 end)))
 	  (else (error "Second param is neither char nor predicate procedure."
 		       string-skip criterion)))))
 
@@ -729,9 +739,11 @@
 		      (+ i 1)))))
 	  ((procedure? criterion)
 	   (let lp ((i (- end 1)))
-	     (if (>= i start) start
-		  (if (criterion (string-ref str i)) (lp (- i 1))
-		      (+ i 1)))))
+	     (if (< i start)
+                 start
+                 (if (criterion (string-ref str i))
+                     (lp (- i 1))
+                     (+ i 1)))))
 	  (else (error "CRITERION param is neither procedure nor char."
 		       string-skip-right criterion)))))
 
@@ -1051,7 +1063,7 @@
     (define ans (make-vector (- end start)))
     (do ((i (- end 1) (- i 1)))
 	((< i start) ans)
-      (vector-set! ans i (string-ref s i)))))
+      (vector-set! ans (- i start) (string-ref s i)))))
 
 ;;; Defined by R5RS, so commented out here.
 ;(define (list->string lis) (string-unfold null? car cdr lis))
@@ -1203,9 +1215,9 @@
         (error "grammar must be one of (infix strict-infix prefix suffix)" grammar))
       (if (not limit) (set! no-limit #t))
       (if (not (or no-limit
-                  (and (exact? limit) (integer? limit) (>= limit 0))))
+                  (and (integer? limit) (exact? limit) (>= limit 0))))
         (error "limit must be exact nonnegative integer or #f" limit))
-      (if (not (and (exact? start) (integer? start)))
+      (if (not (and (integer? start) (exact? start)))
         (error "start argument must be exact integer" start))
       (if (not (<= 0 start slen))
         (error "start argument out of range" start))
@@ -1214,7 +1226,7 @@
       (if (not (<= start end))
         (error "start argument is greater than end argument" (list start end)))
 
-      (cond ((string-cursor=? s start end)
+      (cond ((string-cursor=? start end)
              (if (eq? grammar 'strict-infix)
                (error "empty string cannot be spilt with strict-infix grammar")
                '()))
@@ -1226,7 +1238,7 @@
   (if (not limit)
     (map string (string->list/cursors s start end))
     (let loop ((r '()) (c start) (n 0))
-      (cond ((string-cursor=? s c end) (reverse r))
+      (cond ((string-cursor=? c end) (reverse r))
             ((>= n limit) (reverse (cons (substring s c end) r)))
             (else (loop (cons (string (string-ref s c)) r)
                         (string-cursor-next s c)

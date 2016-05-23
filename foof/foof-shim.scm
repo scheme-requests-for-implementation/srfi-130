@@ -47,7 +47,7 @@
 (define (substring-cursor s start . o)
   (substring s start (if (pair? o) (car o) (string-length s))))
 
-(define (string-concatenate ls) (apply string-append ls))
+;(define (string-concatenate ls) (apply string-append ls))
 
 (define string-size string-length)
 

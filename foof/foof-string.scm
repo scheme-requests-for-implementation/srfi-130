@@ -30,9 +30,10 @@
 ;;> \var{char-set-contains?}).  Always returns false if \var{str} is
 ;;> empty.
 
-(define (string-any check str)
-  (let ((pred (make-char-predicate check))
-        (end (string-cursor-end str)))
+(define (string-any check str . rest)
+  (let* ((str (apply string-copy/cursors str rest))
+         (pred (make-char-predicate check))
+         (end (string-cursor-end str)))
     (and (string-cursor>? end (string-cursor-start str))
          (let lp ((i (string-cursor-start str)))
            (let ((i2 (string-cursor-next str i))
@@ -45,8 +46,24 @@
 ;;> \var{str}.  \var{check} can be a procedure, char or char-set as in
 ;;> \scheme{string-any}.  Always returns true if \var{str} is empty.
 
-(define (string-every check str)
+;;; Must return the true value returned by the predicate,
+;;; so the following definition is commented out.
+#;
+(define (string-every check str . FIXME)
   (not (string-any (complement (make-char-predicate check)) str)))
+
+(define (string-every check str . rest)
+  (let* ((str (apply string-copy/cursors str rest))
+         (n (string-length str))
+         (pred (make-char-predicate check)))
+    (let loop ((result #t)
+               (i 0))
+      (if (= i n)
+          result
+          (let ((x (pred (string-ref str i))))
+            (if x
+                (loop x (+ i 1))
+                #f))))))
 
 ;;> Returns a cursor pointing to the first position from the left in
 ;;> string for which \var{check} is true.  \var{check} can be a
@@ -108,14 +125,18 @@
 ;;> single string.  If \var{separator} is provided it is inserted
 ;;> between each pair of strings.
 
-(define %string-join string-concatenate)
+(define (%string-join strings sep)
+  (cond ((null? strings) "")
+        ((null? (cdr strings)) (car strings))
+        (else
+         (string-append (car strings) sep (%string-join (cdr strings) sep)))))
 
 ;;> Split \var{str} into a list of substrings separated by \var{pred},
 ;;> which defaults to \scheme{#\\space}.  Multiple adjacent characters
 ;;> which satisy \var{pred} will result in empty strings in the list.
 ;;> If the optional \var{limit} is provided, splits into at most that
 ;;> many substrings starting from the left.
-
+#;
 (define (string-split str . o)
   (let ((pred (make-char-predicate (if (pair? o) (car o) #\space)))
         (limit (if (and (pair? o) (pair? (cdr o)))
@@ -147,7 +168,7 @@
 ;;> Returns a copy of the string \var{str} with all characters
 ;;> matching \var{pred} (default \scheme{#\\space}) removed from the
 ;;> right.
-
+#;
 (define (string-trim-right str . o)
   (let ((pred (make-char-predicate (if (pair? o) (car o) #\space))))
     (substring-cursor str
@@ -157,8 +178,8 @@
 ;;> Returns a copy of the string \var{str} with all characters
 ;;> matching \var{pred} (default \scheme{#\\space}) removed from both
 ;;> sides.
-
-(define (string-trim str . o)
+#;
+(define (string-trim-both str . o)
   (let* ((pred (if (pair? o) (car o) #\space))
          (left (string-skip str pred))
          (right (string-skip-right str pred)))
@@ -228,7 +249,7 @@
 ;;>
 ;;> Count the number of characters in \var{str} for which \var{check}
 ;;> is true.
-
+#;
 (define (string-count str check)
   (let ((pred (make-char-predicate check)))
     (%string-fold (lambda (ch count) (if (pred ch) (+ count 1) count)) 0 str)))

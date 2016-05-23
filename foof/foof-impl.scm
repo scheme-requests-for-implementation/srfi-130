@@ -44,10 +44,11 @@
   (list->string (reverse ls)))
 
 (define (string-join str-ls . o)
-  (let ((sep (if (pair? o) (car o) ""))
+  (let ((sep (if (pair? o) (car o) " "))
         (grammar (if (and (pair? o) (pair? (cdr o))) (cadr o) 'infix)))
     (case grammar
-      ((infix) (%string-join str-ls sep))
+      ((infix)
+       (%string-join str-ls sep))
       ((strict-infix)
        (if (null? str-ls)
            (error "string-join 'strict-infix called on an empty list")
@@ -71,7 +72,7 @@
 (define (string-copy/cursors str . o)
   (cond ((null? o) (substring-cursor str (string-cursor-start str)))
         ((string-cursor? (car o)) (apply substring-cursor str o))
-        (else (apply substring str o))))
+        (else (apply substring-cursor str o))))
 
 (define (string-arg str o)
   (if (pair? o) (apply string-copy/cursors str o) str))
@@ -90,7 +91,7 @@
   (let ((start (string-cursor-back str (string-cursor-end str) n)))
     (substring-cursor str start)))
 (define (string-drop str n)
-  (substring str n))
+  (substring-cursor str n))
 (define (string-drop-right str n)
   (let ((end (string-cursor-back str (string-cursor-end str) n)))
     (substring-cursor str (string-cursor-start str) end)))
@@ -140,10 +141,33 @@
                         (string-cursor-next s1 mismatch)
                         (string-cursor-end s1))))
 
-(define (string-prefix? s1 s2 . o)
-  (equal? (string-length s1) (apply string-prefix-length s1 s2 o)))
-(define (string-suffix? s1 s2 . o)
-  (equal? (string-length s1) (apply string-suffix-length s1 s2 o)))
+(define string-prefix?
+  (case-lambda
+   ((s1 s2)
+    (= (string-length s1) (string-prefix-length s1 s2)))
+   ((s1 s2 start1)
+    (string-prefix? s1 s2 start1 (string-length s1) 0 (string-length s2)))
+   ((s1 s2 start1 end1)
+    (string-prefix? s1 s2 start1 end1 0 (string-length s2)))
+   ((s1 s2 start1 end1 start2)
+    (string-prefix? s1 s2 start1 end1 start2 (string-length s2)))
+   ((s1 s2 start1 end1 start2 end2)
+    (string-prefix? (substring/cursors s1 start1 end1)
+                    (substring/cursors s2 start2 end2)))))
+
+(define string-suffix?
+  (case-lambda
+   ((s1 s2)
+    (= (string-length s1) (string-suffix-length s1 s2)))
+   ((s1 s2 start1)
+    (string-suffix? s1 s2 start1 (string-length s1) 0 (string-length s2)))
+   ((s1 s2 start1 end1)
+    (string-suffix? s1 s2 start1 end1 0 (string-length s2)))
+   ((s1 s2 start1 end1 start2)
+    (string-suffix? s1 s2 start1 end1 start2 (string-length s2)))
+   ((s1 s2 start1 end1 start2 end2)
+    (string-suffix? (substring/cursors s1 start1 end1)
+                    (substring/cursors s2 start2 end2)))))
 
 (define (string-index str pred . o)
   (apply string-find str pred (cursor-args str o)))
@@ -191,7 +215,23 @@
 (define (string-reverse str . o)
   (list->string (reverse (string->list/cursors (string-arg str o)))))
 
-(define string-concatenate %string-join)
+;;; The following definition is commented out because it doesn't work.
+;;; In foof-string.scm, %string-join is defined to be the same as
+;;; string-concatenate, creating a circularity that probably won't
+;;; be detected until run time.
+
+;(define string-concatenate %string-join)
+
+;;; FIXME: The following definition is correct, but may not work on
+;;; some systems when there are many strings in the list.
+
+(define (string-concatenate strings)
+  (cond ((null? strings)
+         (make-string 0))
+        ((null? (cdr strings))
+         (string-copy (car strings)))
+        (else
+         (apply string-append strings))))
 
 (define (string-concatenate-reverse str-ls . o)
   (let ((str-ls
@@ -255,17 +295,37 @@
                                   (string-cursor-end str)))))
     (if (and (eq? grammar 'strict-infix) (string-cursor>=? start end))
         (error "string-split 'strict-infix called on an empty string"))
-    (let lp ((sc start) (i 0) (res '()))
-      (cond
-       ((string-cursor>=? sc end)
-        (reverse res))
-       ((and (< i limit) (string-contains str delim sc end))
-        => (lambda (sc2)
-             (lp (string-cursor-forward str sc2 delim-len)
-                 (+ i 1)
-                 (cons (substring-cursor str sc sc2) res))))
-       (else
-        (lp end i (cons (substring-cursor str sc end) res)))))))
+    (let ((res
+           (if (= 0 delim-len)
+               (map string
+                    (string->list (substring/cursors str start end)))
+               (let lp ((sc start) (i 0) (res '()))
+                 (cond
+                  ((string-cursor>=? sc end)
+                   (reverse res))
+                  ((and (< i limit) (string-contains str delim sc end))
+                   => (lambda (sc2)
+                        (let ((sc3 (string-cursor-forward str sc2 delim-len)))
+                          (lp sc3
+                              (+ i 1)
+                              (let ((res (cons (substring-cursor str sc sc2)
+                                               res)))
+                                (if (string-cursor=? sc3 end)
+                                    (cons "" res)
+                                    res))))))
+                  (else
+                   (lp end i (cons (substring-cursor str sc end) res))))))))
+      (case grammar
+       ((prefix)
+        (if (and (pair? res) (= 0 (string-length (car res))))
+            (cdr res)
+            res))
+       ((suffix)
+        (if (and (pair? res) (= 0 (string-length (car (reverse res)))))
+            (reverse (cdr (reverse res)))
+            res))
+       (else res)))))
+
 
 (define (string-filter pred str . o)
   (let ((out (open-output-string)))
