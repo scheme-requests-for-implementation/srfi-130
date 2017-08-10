@@ -6,6 +6,8 @@ This repository hosts [[https://srfi.schemers.org/srfi-130/][SRFI 130]]: Cursor-
 
 This SRFI is in /final/ status.
 
+See also [[https://srfi.schemers.org/srfi-13/][SRFI 13: String Libraries]].
+
 The full documentation for this SRFI can be found in the [[https://srfi.schemers.org/srfi-130/srfi-130.html][SRFI Document]].
 
 If you'd like to participate in the discussion of this SRFI, or report issues with it, please [[shttp://srfi.schemers.org/srfi-130/][join the SRFI-130 mailing list]] and send your message there.
