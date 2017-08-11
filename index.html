@@ -2,11 +2,20 @@
 <html>
   <head>
     <title>Cursor-based string library</title>
-    <link href="/admin.css" rel="stylesheet">
-    <link href="/list.css" rel="stylesheet">
-    <link href="/favicon.png" rel="icon" sizes="192x192" type="image/png">
+    <link href="../srfi-common/admin.css" rel="stylesheet">
+    <link href="../srfi-common/list.css" rel="stylesheet">
+    <link href="../srfi-common/favicon.png" rel="icon" sizes="192x192" type="image/png">
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script type="text/x-mathjax-config">
+     MathJax.Hub.Config({
+       tex2jax: {inlineMath: [['$','$'], ['\\(','\\)']]}
+     });
+    </script>
+    <script crossorigin="anonymous" integrity=
+            "sha384-Ra6zh6uYMmH5ydwCqqMoykyf1T/+ZcnOQfFPhDrp2kI4OIxadnhsvvA2vv9A7xYv" src=
+            "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"
+            type="text/javascript"></script>
   </head>
 
   <body>
@@ -62,4 +71,19 @@
                  value="unsubscribe" >
           <input name="list"
                  type="hidden"
-                 value="srfi-130@srfi.schemers.org" ></form></li></ul></body></html>
+                 value="srfi-130@srfi.schemers.org"></form></li></ul>
+    <h2>Abstract</h2>      <p><abbr title=
+      "Revised&lt;sup&gt;5&lt;/sup&gt; Report on Scheme">R5RS</abbr> Scheme has
+      an impoverished set of string-processing utilities, which is a problem
+      for authors of portable code. Although <abbr title=
+      "Revised&lt;sup&gt;7&lt;/sup&gt; Report on Scheme">R7RS</abbr> provides
+      some extensions and improvements, it is still very incomplete. This
+      <abbr title="Scheme Request for Implementation">SRFI</abbr> proposes a
+      coherent and comprehensive set of string-processing procedures; it is
+      accompanied by a portable sample implementation of the spec.
+      <p>This SRFI is derived from SRFI 13. The biggest
+      difference is that it allows subsequences of strings to be specified by
+      <em>cursors</em> as well as the traditional string indexes. In addition,
+      it omits the comparison, case-mapping, and mutation operations of SRFI
+      13, as well as all procedures already present in <abbr title=
+      "Revised&lt;sup&gt;7&lt;/sup&gt; Report on Scheme">R7RS</abbr>.</body></html>
