@@ -22,7 +22,7 @@
      (call-with-values (lambda () (xparser arg))
        (lambda (rest var ...)
          (%let-optionals* rest (opt-clause ...) body ...))))
-    
+
     ((%let-optionals* arg ((var default) opt-clause ...) body ...)
      (call-with-values (lambda () (if (null? arg) (values default '())
 				      (values (car arg) (cdr arg))))

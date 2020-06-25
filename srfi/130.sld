@@ -1,6 +1,6 @@
 (define-library (srfi 130)
 
-  (export 
+  (export
 
     string-cursor?
     string-cursor-start    string-cursor-end
@@ -12,7 +12,7 @@
     string-cursor-diff
     string-cursor->index   string-index->cursor
 
-    string-null? 
+    string-null?
     string-every string-any
 
     string-tabulate
@@ -25,11 +25,11 @@
     substring/cursors  string-copy/cursors
     string-take        string-take-right
     string-drop        string-drop-right
-    string-pad         string-pad-right 
+    string-pad         string-pad-right
     string-trim        string-trim-right string-trim-both
 
     string-prefix-length    string-suffix-length
-    string-prefix?          string-suffix?    
+    string-prefix?          string-suffix?
 
     string-index     string-index-right
     string-skip      string-skip-right
@@ -41,7 +41,7 @@
     string-for-each-cursor
     string-replicate    string-count
     string-replace      string-split
-    string-filter       string-remove 
+    string-filter       string-remove
 
     )
 
