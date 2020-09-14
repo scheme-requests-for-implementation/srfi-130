@@ -2347,9 +2347,7 @@
                                 (string-contains "abcdeffffoo" "foo")))
     (fail 'string-contains))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains "abcdeffffoo" "efffoo")))
+(or (not (string-contains "abcdeffffoo" "efffoo"))
     (fail 'string-contains))
 
 (or (eqv? 0
@@ -2382,10 +2380,7 @@
                                 (string-contains-right "abcdeffffoo" "foo")))
     (fail 'string-contains-right))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains-right "abcdeffffoo"
-                                                       "efffoo")))
+(or (not (string-contains-right "abcdeffffoo" "efffoo"))
     (fail 'string-contains-right))
 
 
@@ -2399,9 +2394,7 @@
                                 (string-contains "abcdeffffoo" "" 2)))
     (fail 'string-contains))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains "abcdeffffoo" "a" 2)))
+(or (not (string-contains "abcdeffffoo" "a" 2))
     (fail 'string-contains))
 
 (or (eqv? 5
@@ -2419,9 +2412,7 @@
                                 (string-contains "abcdeffffoo" "foo" 2)))
     (fail 'string-contains))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains "abcdeffffoo" "efffoo" 2)))
+(or (not (string-contains "abcdeffffoo" "efffoo" 2))
     (fail 'string-contains))
 
 (or (eqv? 0
@@ -2435,10 +2426,7 @@
                                                        "" 2)))
     (fail 'string-contains-right))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains-right "abcdeffffoo"
-                                                       "a" 2)))
+(or (not (string-contains-right "abcdeffffoo" "a" 2))
     (fail 'string-contains-right))
 
 (or (eqv? 7
@@ -2459,10 +2447,7 @@
                                                        "foo" 2)))
     (fail 'string-contains-right))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains-right "abcdeffffoo"
-                                                       "efffoo" 2)))
+(or (not (string-contains-right "abcdeffffoo" "efffoo" 2))
     (fail 'string-contains-right))
 
 
@@ -2477,10 +2462,7 @@
                                                  "" 2 10)))
     (fail 'string-contains))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains "abcdeffffoo"
-                                                 "a" 2 10)))
+(or (not (string-contains "abcdeffffoo" "a" 2 10))
     (fail 'string-contains))
 
 (or (eqv? 5
@@ -2495,16 +2477,10 @@
                                                  "eff" 2 10)))
     (fail 'string-contains))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains "abcdeffffoo"
-                                                 "foo" 2 10)))
+(or (not (string-contains "abcdeffffoo" "foo" 2 10))
     (fail 'string-contains))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains "abcdeffffoo"
-                                                 "efffoo" 2 10)))
+(or (not (string-contains "abcdeffffoo" "efffoo" 2 10))
     (fail 'string-contains))
 
 (or (eqv? 0
@@ -2518,10 +2494,7 @@
                                                        "" 2 10)))
     (fail 'string-contains-right))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains-right "abcdeffffoo"
-                                                       "a" 2 10)))
+(or (not (string-contains-right "abcdeffffoo" "a" 2 10))
     (fail 'string-contains-right))
 
 (or (eqv? 7
@@ -2536,16 +2509,10 @@
                                                        "eff" 2 10)))
     (fail 'string-contains-right))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains-right "abcdeffffoo"
-                                                       "foo" 2 10)))
+(or (not (string-contains-right "abcdeffffoo" "foo" 2 10))
     (fail 'string-contains-right))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains-right "abcdeffffoo"
-                                                       "efffoo" 2 10)))
+(or (not (string-contains-right "abcdeffffoo" "efffoo" 2 10))
     (fail 'string-contains-right))
 
 
@@ -2578,16 +2545,10 @@
                                                  "eff" 2 10 1)))
     (fail 'string-contains))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains "abcdeffffoo"
-                                                 "foo" 2 10 1)))
+(or (not (string-contains "abcdeffffoo" "foo" 2 10 1))
     (fail 'string-contains))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains "abcdeffffoo"
-                                                 "efffoo" 2 10 1)))
+(or (not (string-contains "abcdeffffoo" "efffoo" 2 10 1))
     (fail 'string-contains))
 
 (or (eqv? 0
@@ -2619,16 +2580,10 @@
                                                        "eff" 2 10 1)))
     (fail 'string-contains-right))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains-right "abcdeffffoo"
-                                                       "foo" 2 10 1)))
+(or (not (string-contains-right "abcdeffffoo" "foo" 2 10 1))
     (fail 'string-contains-right))
 
-(or (eqv? #f
-          (string-cursor->index "abcdeffffoo"
-                                (string-contains-right "abcdeffffoo"
-                                                       "efffoo" 2 10 1)))
+(or (not (string-contains-right "abcdeffffoo" "efffoo" 2 10 1))
     (fail 'string-contains-right))
 
 
