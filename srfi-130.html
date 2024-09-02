@@ -562,8 +562,7 @@ required to be consistent from call to call.
     is neither a cursor nor an index, <code>string-cursor?</code> will
     always return <code>#f</code>.
 </dd>
-
-<dl>
+<dd>
 <!--
 ==== string-cursor-start string-cursor-end
 ============================================================================-->
@@ -1125,7 +1124,6 @@ A successful match must lie entirely in the
 <p>Note that the result is always a cursor, even when <var>start1</var> and <var>end1</var>
 are indexes.<br />Use <code>string-cursor->index</code> to convert a cursor result to an index.</p>
 
-<p>
 <pre class=code-example>
 (string-contains "eek -- what a geek." "ee"
                  12 18) ; Searches "a geek"
@@ -1424,7 +1422,7 @@ Example:
 <a name="string-split"></a>
 <code class=proc-def>string-split</code><var> s delimiter [grammar limit start end] → list</var>
 <dd class=proc-def>
-   Returns a list of the words contained in the substring of <em>string</em> from <em>start</em> (inclusive)
+   <p>Returns a list of the words contained in the substring of <em>string</em> from <em>start</em> (inclusive)
 to <em>end</em> (exclusive).
 <em>Delimiter</em> specifies a string that is to be used as the word separator.
 This will often be a single character, but multiple characters are allowed
